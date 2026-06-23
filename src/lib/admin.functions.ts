@@ -66,7 +66,7 @@ export const getAdminDashboard = createServerFn({ method: "GET" })
       sb
         .from("elections")
         .select("id, nome, status, vagas_titulares, vagas_suplentes, data_fim_votacao")
-        .in("status", ["voting", "inscription", "draft", "closed"])
+        .in("status", ["voting", "registration", "draft", "closed"])
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
@@ -130,12 +130,12 @@ export const upsertElection = createServerFn({ method: "POST" })
 export const setElectionStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z
-      .object({
-        id: z.string().uuid(),
-        status: z.enum(["draft", "inscription", "voting", "closed", "published"]),
-      })
-      .parse(d),
+      z
+        .object({
+          id: z.string().uuid(),
+          status: z.enum(["draft", "registration", "voting", "closed"]),
+        })
+        .parse(d),
   )
   .handler(async ({ context, data }) => {
     const sb = await ensureAdmin(context.userId);
