@@ -10,33 +10,63 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as VotarIndexRouteImport } from './routes/votar.index'
+import { Route as VotarConfirmadoRouteImport } from './routes/votar.confirmado'
+import { Route as VotarCedulaRouteImport } from './routes/votar.cedula'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VotarIndexRoute = VotarIndexRouteImport.update({
+  id: '/votar/',
+  path: '/votar/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VotarConfirmadoRoute = VotarConfirmadoRouteImport.update({
+  id: '/votar/confirmado',
+  path: '/votar/confirmado',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VotarCedulaRoute = VotarCedulaRouteImport.update({
+  id: '/votar/cedula',
+  path: '/votar/cedula',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/votar/cedula': typeof VotarCedulaRoute
+  '/votar/confirmado': typeof VotarConfirmadoRoute
+  '/votar/': typeof VotarIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/votar/cedula': typeof VotarCedulaRoute
+  '/votar/confirmado': typeof VotarConfirmadoRoute
+  '/votar': typeof VotarIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/votar/cedula': typeof VotarCedulaRoute
+  '/votar/confirmado': typeof VotarConfirmadoRoute
+  '/votar/': typeof VotarIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/votar/cedula' | '/votar/confirmado' | '/votar/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/votar/cedula' | '/votar/confirmado' | '/votar'
+  id: '__root__' | '/' | '/votar/cedula' | '/votar/confirmado' | '/votar/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  VotarCedulaRoute: typeof VotarCedulaRoute
+  VotarConfirmadoRoute: typeof VotarConfirmadoRoute
+  VotarIndexRoute: typeof VotarIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +78,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/votar/': {
+      id: '/votar/'
+      path: '/votar'
+      fullPath: '/votar/'
+      preLoaderRoute: typeof VotarIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/votar/confirmado': {
+      id: '/votar/confirmado'
+      path: '/votar/confirmado'
+      fullPath: '/votar/confirmado'
+      preLoaderRoute: typeof VotarConfirmadoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/votar/cedula': {
+      id: '/votar/cedula'
+      path: '/votar/cedula'
+      fullPath: '/votar/cedula'
+      preLoaderRoute: typeof VotarCedulaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  VotarCedulaRoute: VotarCedulaRoute,
+  VotarConfirmadoRoute: VotarConfirmadoRoute,
+  VotarIndexRoute: VotarIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
