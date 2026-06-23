@@ -10,14 +10,20 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VotarIndexRouteImport } from './routes/votar.index'
 import { Route as VotarConfirmadoRouteImport } from './routes/votar.confirmado'
 import { Route as VotarCedulaRouteImport } from './routes/votar.cedula'
+import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -40,10 +46,16 @@ const VotarCedulaRoute = VotarCedulaRouteImport.update({
   path: '/votar/cedula',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/admin': typeof AuthenticatedAdminRoute
   '/votar/cedula': typeof VotarCedulaRoute
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar/': typeof VotarIndexRoute
@@ -51,6 +63,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/admin': typeof AuthenticatedAdminRoute
   '/votar/cedula': typeof VotarCedulaRoute
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar': typeof VotarIndexRoute
@@ -58,20 +71,36 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/votar/cedula': typeof VotarCedulaRoute
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar/': typeof VotarIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/votar/cedula' | '/votar/confirmado' | '/votar/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/admin'
+    | '/votar/cedula'
+    | '/votar/confirmado'
+    | '/votar/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/votar/cedula' | '/votar/confirmado' | '/votar'
+  to:
+    | '/'
+    | '/auth'
+    | '/admin'
+    | '/votar/cedula'
+    | '/votar/confirmado'
+    | '/votar'
   id:
     | '__root__'
     | '/'
+    | '/_authenticated'
     | '/auth'
+    | '/_authenticated/admin'
     | '/votar/cedula'
     | '/votar/confirmado'
     | '/votar/'
@@ -79,6 +108,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   VotarCedulaRoute: typeof VotarCedulaRoute
   VotarConfirmadoRoute: typeof VotarConfirmadoRoute
@@ -92,6 +122,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -122,11 +159,30 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VotarCedulaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/admin': {
+      id: '/_authenticated/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedAdminRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAdminRoute: AuthenticatedAdminRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   VotarCedulaRoute: VotarCedulaRoute,
   VotarConfirmadoRoute: VotarConfirmadoRoute,
