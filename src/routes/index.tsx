@@ -32,6 +32,7 @@ function Index() {
             <a className="opacity-90 hover:opacity-100" href="#sobre">Sobre</a>
             <a className="opacity-90 hover:opacity-100" href="#processo">Processo</a>
             <a className="opacity-90 hover:opacity-100" href="#seguranca">Segurança</a>
+            <Link className="opacity-90 hover:opacity-100" to="/auth">Admin</Link>
           </nav>
         </div>
       </header>
