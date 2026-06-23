@@ -9,11 +9,17 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VotarIndexRouteImport } from './routes/votar.index'
 import { Route as VotarConfirmadoRouteImport } from './routes/votar.confirmado'
 import { Route as VotarCedulaRouteImport } from './routes/votar.cedula'
 
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -37,12 +43,14 @@ const VotarCedulaRoute = VotarCedulaRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/votar/cedula': typeof VotarCedulaRoute
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar/': typeof VotarIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/votar/cedula': typeof VotarCedulaRoute
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar': typeof VotarIndexRoute
@@ -50,20 +58,28 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/votar/cedula': typeof VotarCedulaRoute
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar/': typeof VotarIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/votar/cedula' | '/votar/confirmado' | '/votar/'
+  fullPaths: '/' | '/auth' | '/votar/cedula' | '/votar/confirmado' | '/votar/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/votar/cedula' | '/votar/confirmado' | '/votar'
-  id: '__root__' | '/' | '/votar/cedula' | '/votar/confirmado' | '/votar/'
+  to: '/' | '/auth' | '/votar/cedula' | '/votar/confirmado' | '/votar'
+  id:
+    | '__root__'
+    | '/'
+    | '/auth'
+    | '/votar/cedula'
+    | '/votar/confirmado'
+    | '/votar/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthRoute: typeof AuthRoute
   VotarCedulaRoute: typeof VotarCedulaRoute
   VotarConfirmadoRoute: typeof VotarConfirmadoRoute
   VotarIndexRoute: typeof VotarIndexRoute
@@ -71,6 +87,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -104,6 +127,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthRoute: AuthRoute,
   VotarCedulaRoute: VotarCedulaRoute,
   VotarConfirmadoRoute: VotarConfirmadoRoute,
   VotarIndexRoute: VotarIndexRoute,
