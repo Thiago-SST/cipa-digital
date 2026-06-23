@@ -14,7 +14,249 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      access_logs: {
+        Row: {
+          acao: string
+          ator: string | null
+          created_at: string
+          detalhes: Json | null
+          id: string
+          ip: string | null
+        }
+        Insert: {
+          acao: string
+          ator?: string | null
+          created_at?: string
+          detalhes?: Json | null
+          id?: string
+          ip?: string | null
+        }
+        Update: {
+          acao?: string
+          ator?: string | null
+          created_at?: string
+          detalhes?: Json | null
+          id?: string
+          ip?: string | null
+        }
+        Relationships: []
+      }
+      candidates: {
+        Row: {
+          cargo: string | null
+          created_at: string
+          election_id: string
+          employee_id: string | null
+          foto_url: string | null
+          id: string
+          matricula: string
+          nome: string
+          numero: number | null
+          proposta: string | null
+          setor: string | null
+          status: Database["public"]["Enums"]["candidate_status"]
+        }
+        Insert: {
+          cargo?: string | null
+          created_at?: string
+          election_id: string
+          employee_id?: string | null
+          foto_url?: string | null
+          id?: string
+          matricula: string
+          nome: string
+          numero?: number | null
+          proposta?: string | null
+          setor?: string | null
+          status?: Database["public"]["Enums"]["candidate_status"]
+        }
+        Update: {
+          cargo?: string | null
+          created_at?: string
+          election_id?: string
+          employee_id?: string | null
+          foto_url?: string | null
+          id?: string
+          matricula?: string
+          nome?: string
+          numero?: number | null
+          proposta?: string | null
+          setor?: string | null
+          status?: Database["public"]["Enums"]["candidate_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidates_election_id_fkey"
+            columns: ["election_id"]
+            isOneToOne: false
+            referencedRelation: "elections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidates_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      elections: {
+        Row: {
+          created_at: string
+          data_fim_inscricao: string | null
+          data_fim_votacao: string | null
+          data_inicio_inscricao: string | null
+          data_inicio_votacao: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          status: Database["public"]["Enums"]["election_status"]
+          updated_at: string
+          vagas_suplentes: number
+          vagas_titulares: number
+        }
+        Insert: {
+          created_at?: string
+          data_fim_inscricao?: string | null
+          data_fim_votacao?: string | null
+          data_inicio_inscricao?: string | null
+          data_inicio_votacao?: string | null
+          descricao?: string | null
+          id?: string
+          nome: string
+          status?: Database["public"]["Enums"]["election_status"]
+          updated_at?: string
+          vagas_suplentes?: number
+          vagas_titulares?: number
+        }
+        Update: {
+          created_at?: string
+          data_fim_inscricao?: string | null
+          data_fim_votacao?: string | null
+          data_inicio_inscricao?: string | null
+          data_inicio_votacao?: string | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+          status?: Database["public"]["Enums"]["election_status"]
+          updated_at?: string
+          vagas_suplentes?: number
+          vagas_titulares?: number
+        }
+        Relationships: []
+      }
+      employees: {
+        Row: {
+          ativo: boolean
+          cargo: string | null
+          cpf: string | null
+          created_at: string
+          data_nascimento: string
+          email: string | null
+          id: string
+          matricula: string
+          nome: string
+          setor: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          cargo?: string | null
+          cpf?: string | null
+          created_at?: string
+          data_nascimento: string
+          email?: string | null
+          id?: string
+          matricula: string
+          nome: string
+          setor?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          cargo?: string | null
+          cpf?: string | null
+          created_at?: string
+          data_nascimento?: string
+          email?: string | null
+          id?: string
+          matricula?: string
+          nome?: string
+          setor?: string | null
+        }
+        Relationships: []
+      }
+      vote_tokens: {
+        Row: {
+          election_id: string
+          employee_id: string
+          id: string
+          voted_at: string
+        }
+        Insert: {
+          election_id: string
+          employee_id: string
+          id?: string
+          voted_at?: string
+        }
+        Update: {
+          election_id?: string
+          employee_id?: string
+          id?: string
+          voted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vote_tokens_election_id_fkey"
+            columns: ["election_id"]
+            isOneToOne: false
+            referencedRelation: "elections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vote_tokens_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      votes: {
+        Row: {
+          candidate_id: string
+          created_at: string
+          election_id: string
+          id: string
+        }
+        Insert: {
+          candidate_id: string
+          created_at?: string
+          election_id: string
+          id?: string
+        }
+        Update: {
+          candidate_id?: string
+          created_at?: string
+          election_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "votes_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "votes_election_id_fkey"
+            columns: ["election_id"]
+            isOneToOne: false
+            referencedRelation: "elections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +265,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      candidate_status: "pending" | "approved" | "rejected"
+      election_status: "draft" | "registration" | "voting" | "closed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +393,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      candidate_status: ["pending", "approved", "rejected"],
+      election_status: ["draft", "registration", "voting", "closed"],
+    },
   },
 } as const
