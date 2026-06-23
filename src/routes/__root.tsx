@@ -77,14 +77,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Eleição CIPA — Sistema de Votação" },
+      { name: "description", content: "Plataforma digital para gestão e votação da eleição da CIPA, conforme NR-5." },
+      { property: "og:title", content: "Eleição CIPA — Sistema de Votação" },
+      { property: "og:description", content: "Votação digital, segura e auditável da Comissão Interna de Prevenção de Acidentes e de Assédio." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
       {
