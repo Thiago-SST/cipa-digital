@@ -17,6 +17,7 @@ import { Route as VotarConfirmadoRouteImport } from './routes/votar.confirmado'
 import { Route as VotarCedulaRouteImport } from './routes/votar.cedula'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
+import { Route as AuthenticatedAdminEmpregadosRouteImport } from './routes/_authenticated/admin.empregados'
 import { Route as AuthenticatedAdminEleicoesRouteImport } from './routes/_authenticated/admin.eleicoes'
 import { Route as AuthenticatedAdminEleicoesIdRouteImport } from './routes/_authenticated/admin.eleicoes.$id'
 
@@ -59,6 +60,12 @@ const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedAdminRoute,
 } as any)
+const AuthenticatedAdminEmpregadosRoute =
+  AuthenticatedAdminEmpregadosRouteImport.update({
+    id: '/empregados',
+    path: '/empregados',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminEleicoesRoute =
   AuthenticatedAdminEleicoesRouteImport.update({
     id: '/eleicoes',
@@ -80,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar/': typeof VotarIndexRoute
   '/admin/eleicoes': typeof AuthenticatedAdminEleicoesRouteWithChildren
+  '/admin/empregados': typeof AuthenticatedAdminEmpregadosRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/admin/eleicoes/$id': typeof AuthenticatedAdminEleicoesIdRoute
 }
@@ -90,6 +98,7 @@ export interface FileRoutesByTo {
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar': typeof VotarIndexRoute
   '/admin/eleicoes': typeof AuthenticatedAdminEleicoesRouteWithChildren
+  '/admin/empregados': typeof AuthenticatedAdminEmpregadosRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/admin/eleicoes/$id': typeof AuthenticatedAdminEleicoesIdRoute
 }
@@ -103,6 +112,7 @@ export interface FileRoutesById {
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar/': typeof VotarIndexRoute
   '/_authenticated/admin/eleicoes': typeof AuthenticatedAdminEleicoesRouteWithChildren
+  '/_authenticated/admin/empregados': typeof AuthenticatedAdminEmpregadosRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/admin/eleicoes/$id': typeof AuthenticatedAdminEleicoesIdRoute
 }
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/votar/confirmado'
     | '/votar/'
     | '/admin/eleicoes'
+    | '/admin/empregados'
     | '/admin/'
     | '/admin/eleicoes/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -126,6 +137,7 @@ export interface FileRouteTypes {
     | '/votar/confirmado'
     | '/votar'
     | '/admin/eleicoes'
+    | '/admin/empregados'
     | '/admin'
     | '/admin/eleicoes/$id'
   id:
@@ -138,6 +150,7 @@ export interface FileRouteTypes {
     | '/votar/confirmado'
     | '/votar/'
     | '/_authenticated/admin/eleicoes'
+    | '/_authenticated/admin/empregados'
     | '/_authenticated/admin/'
     | '/_authenticated/admin/eleicoes/$id'
   fileRoutesById: FileRoutesById
@@ -209,6 +222,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/empregados': {
+      id: '/_authenticated/admin/empregados'
+      path: '/empregados'
+      fullPath: '/admin/empregados'
+      preLoaderRoute: typeof AuthenticatedAdminEmpregadosRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/admin/eleicoes': {
       id: '/_authenticated/admin/eleicoes'
       path: '/eleicoes'
@@ -242,11 +262,13 @@ const AuthenticatedAdminEleicoesRouteWithChildren =
 
 interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminEleicoesRoute: typeof AuthenticatedAdminEleicoesRouteWithChildren
+  AuthenticatedAdminEmpregadosRoute: typeof AuthenticatedAdminEmpregadosRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
 }
 
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminEleicoesRoute: AuthenticatedAdminEleicoesRouteWithChildren,
+  AuthenticatedAdminEmpregadosRoute: AuthenticatedAdminEmpregadosRoute,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
 }
 
