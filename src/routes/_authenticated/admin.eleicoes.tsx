@@ -10,6 +10,17 @@ export const Route = createFileRoute("/_authenticated/admin/eleicoes")({
   component: ElectionsPage,
 });
 
+type ElectionFormValues = {
+  nome: string;
+  descricao: string | null;
+  data_inicio_inscricao: string | null;
+  data_fim_inscricao: string | null;
+  data_inicio_votacao: string | null;
+  data_fim_votacao: string | null;
+  vagas_titulares: number;
+  vagas_suplentes: number;
+};
+
 const STATUS_LABEL: Record<string, string> = {
   draft: "Rascunho",
   registration: "Inscrições",
@@ -32,7 +43,7 @@ function ElectionsPage() {
   const q = useQuery({ queryKey: ["admin-elections"], queryFn: () => list() });
 
   const m = useMutation({
-    mutationFn: (input: Parameters<typeof upsert>[0]["data"]) => upsert({ data: input }),
+    mutationFn: (input: ElectionFormValues) => upsert({ data: input }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-elections"] });
       setOpen(false);
