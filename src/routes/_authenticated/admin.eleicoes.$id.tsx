@@ -396,6 +396,9 @@ function ResultsTab({ electionId }: { electionId: string }) {
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Carregando apuração...</p>;
   const r = q.data!;
   const turnout = r.stats.eleitoresAptos ? Math.round((r.stats.eleitoresQueVotaram / r.stats.eleitoresAptos) * 100) : 0;
+  const vagasTotais = r.stats.vagasTitulares + r.stats.vagasSuplentes;
+  const tituFaltam = Math.max(0, r.stats.vagasTitulares - r.titulares.length);
+  const supFaltam = Math.max(0, r.stats.vagasSuplentes - r.suplentes.length);
 
   return (
     <div className="space-y-6">
@@ -405,18 +408,34 @@ function ResultsTab({ electionId }: { electionId: string }) {
         <Stat label="Comparecimento" value={`${turnout}%`} />
       </div>
 
-      <Section title="Titulares eleitos" icon={Award}>
+      <div className="rounded-md border border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+        Vagas configuradas: <strong className="text-foreground">{r.stats.vagasTitulares}</strong> titulares
+        e <strong className="text-foreground">{r.stats.vagasSuplentes}</strong> suplentes
+        (total {vagasTotais}). Candidatos aprovados: {r.stats.candidatosAprovados}.
+        {(tituFaltam > 0 || supFaltam > 0) && (
+          <span className="ml-1 text-destructive">
+            Faltam candidatos para preencher {tituFaltam > 0 && `${tituFaltam} titular(es)`}
+            {tituFaltam > 0 && supFaltam > 0 && " e "}
+            {supFaltam > 0 && `${supFaltam} suplente(s)`}.
+          </span>
+        )}
+        <div className="mt-1">
+          Critério de desempate: maior nº de votos → inscrição mais antiga → menor número de cédula (NR-5).
+        </div>
+      </div>
+
+      <Section title={`Titulares eleitos (${r.titulares.length}/${r.stats.vagasTitulares})`} icon={Award}>
         {r.titulares.length ? (
           <ResultsTable rows={r.titulares} />
         ) : (
           <p className="text-sm text-muted-foreground">Sem dados.</p>
         )}
       </Section>
-      <Section title="Suplentes">
+      <Section title={`Suplentes (${r.suplentes.length}/${r.stats.vagasSuplentes})`}>
         {r.suplentes.length ? <ResultsTable rows={r.suplentes} /> : <p className="text-sm text-muted-foreground">Sem dados.</p>}
       </Section>
       <Section title="Ranking completo">
-        <ResultsTable rows={r.ranking} />
+        <ResultsTable rows={r.ranking} showClass />
       </Section>
 
       <button
@@ -444,18 +463,60 @@ function Section({ title, icon: Icon, children }: { title: string; icon?: typeof
     </section>
   );
 }
-function ResultsTable({ rows }: { rows: Array<{ id: string; nome: string; matricula: string; setor: string | null; numero: number | null; votos: number }> }) {
+function ResultsTable({
+  rows,
+  showClass = false,
+}: {
+  rows: Array<{
+    id: string;
+    nome: string;
+    matricula: string;
+    setor: string | null;
+    numero: number | null;
+    votos: number;
+    posicao?: number;
+    classificacao?: "titular" | "suplente" | "nao_eleito";
+  }>;
+  showClass?: boolean;
+}) {
   return (
     <table className="w-full text-sm">
       <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
-        <tr><th className="py-1">Nº</th><th>Nome</th><th>Setor</th><th className="text-right">Votos</th></tr>
+        <tr>
+          <th className="py-1 w-10">#</th>
+          <th className="w-12">Cédula</th>
+          <th>Nome</th>
+          <th>Setor</th>
+          {showClass && <th>Classificação</th>}
+          <th className="text-right">Votos</th>
+        </tr>
       </thead>
       <tbody>
         {rows.map((c) => (
           <tr key={c.id} className="border-b border-border/50">
+            <td className="py-1.5 text-muted-foreground">{c.posicao ?? "—"}º</td>
             <td className="py-1.5 font-mono">{c.numero ?? "—"}</td>
             <td>{c.nome} <span className="text-xs text-muted-foreground">· mat. {c.matricula}</span></td>
             <td>{c.setor ?? "—"}</td>
+            {showClass && (
+              <td>
+                {c.classificacao === "titular" && (
+                  <span className="inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
+                    Titular
+                  </span>
+                )}
+                {c.classificacao === "suplente" && (
+                  <span className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-xs font-semibold text-secondary-foreground">
+                    Suplente
+                  </span>
+                )}
+                {c.classificacao === "nao_eleito" && (
+                  <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                    Não eleito
+                  </span>
+                )}
+              </td>
+            )}
             <td className="text-right font-semibold">{c.votos}</td>
           </tr>
         ))}
