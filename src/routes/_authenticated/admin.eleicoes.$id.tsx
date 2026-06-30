@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, Play, Square, Plus, Trash2, Printer, Award } from "lucide-react";
+import { ArrowLeft, Play, Square, Plus, Trash2, Printer, Award, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 import {
   getElection,
@@ -397,8 +397,12 @@ function ResultsTab({ electionId }: { electionId: string }) {
   const r = q.data!;
   const turnout = r.stats.eleitoresAptos ? Math.round((r.stats.eleitoresQueVotaram / r.stats.eleitoresAptos) * 100) : 0;
   const vagasTotais = r.stats.vagasTitulares + r.stats.vagasSuplentes;
-  const tituFaltam = Math.max(0, r.stats.vagasTitulares - r.titulares.length);
-  const supFaltam = Math.max(0, r.stats.vagasSuplentes - r.suplentes.length);
+  const tituPreenchidas = r.titulares.length;
+  const supPreenchidas = r.suplentes.length;
+  const tituFaltam = Math.max(0, r.stats.vagasTitulares - tituPreenchidas);
+  const supFaltam = Math.max(0, r.stats.vagasSuplentes - supPreenchidas);
+  const vagasAbertas = tituFaltam + supFaltam;
+  const candidatosFaltantes = Math.max(0, vagasTotais - r.stats.candidatosAprovados);
 
   return (
     <div className="space-y-6">
@@ -408,31 +412,37 @@ function ResultsTab({ electionId }: { electionId: string }) {
         <Stat label="Comparecimento" value={`${turnout}%`} />
       </div>
 
-      <div className="rounded-md border border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
-        Vagas configuradas: <strong className="text-foreground">{r.stats.vagasTitulares}</strong> titulares
-        e <strong className="text-foreground">{r.stats.vagasSuplentes}</strong> suplentes
-        (total {vagasTotais}). Candidatos aprovados: {r.stats.candidatosAprovados}.
-        {(tituFaltam > 0 || supFaltam > 0) && (
-          <span className="ml-1 text-destructive">
-            Faltam candidatos para preencher {tituFaltam > 0 && `${tituFaltam} titular(es)`}
-            {tituFaltam > 0 && supFaltam > 0 && " e "}
-            {supFaltam > 0 && `${supFaltam} suplente(s)`}.
-          </span>
-        )}
-        <div className="mt-1">
-          Critério de desempate: maior nº de votos → inscrição mais antiga → menor número de cédula (NR-5).
-        </div>
-      </div>
+      <VagasStatusBanner
+        vagasTit={r.stats.vagasTitulares}
+        vagasSup={r.stats.vagasSuplentes}
+        tituPreenchidas={tituPreenchidas}
+        supPreenchidas={supPreenchidas}
+        tituFaltam={tituFaltam}
+        supFaltam={supFaltam}
+        vagasAbertas={vagasAbertas}
+        vagasTotais={vagasTotais}
+        candidatosAprovados={r.stats.candidatosAprovados}
+        candidatosFaltantes={candidatosFaltantes}
+        electionStatus={r.election.status}
+      />
 
       <Section title={`Titulares eleitos (${r.titulares.length}/${r.stats.vagasTitulares})`} icon={Award}>
-        {r.titulares.length ? (
-          <ResultsTable rows={r.titulares} />
-        ) : (
-          <p className="text-sm text-muted-foreground">Sem dados.</p>
+        {r.titulares.length ? <ResultsTable rows={r.titulares} /> : <p className="text-sm text-muted-foreground">Sem dados.</p>}
+        {tituFaltam > 0 && (
+          <p className="mt-3 flex items-center gap-1.5 text-xs text-destructive">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {tituFaltam} vaga(s) de titular em aberto — sem candidatos aprovados suficientes.
+          </p>
         )}
       </Section>
       <Section title={`Suplentes (${r.suplentes.length}/${r.stats.vagasSuplentes})`}>
         {r.suplentes.length ? <ResultsTable rows={r.suplentes} /> : <p className="text-sm text-muted-foreground">Sem dados.</p>}
+        {supFaltam > 0 && (
+          <p className="mt-3 flex items-center gap-1.5 text-xs text-destructive">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {supFaltam} vaga(s) de suplente em aberto — sem candidatos aprovados suficientes.
+          </p>
+        )}
       </Section>
       <Section title="Ranking completo">
         <ResultsTable rows={r.ranking} showClass />
@@ -452,6 +462,142 @@ function Stat({ label, value }: { label: string; value: string | number }) {
     <div className="rounded-lg border border-border bg-card p-4">
       <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className="mt-1 text-2xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function VagasStatusBanner({
+  vagasTit,
+  vagasSup,
+  tituPreenchidas,
+  supPreenchidas,
+  tituFaltam,
+  supFaltam,
+  vagasAbertas,
+  vagasTotais,
+  candidatosAprovados,
+  candidatosFaltantes,
+  electionStatus,
+}: {
+  vagasTit: number;
+  vagasSup: number;
+  tituPreenchidas: number;
+  supPreenchidas: number;
+  tituFaltam: number;
+  supFaltam: number;
+  vagasAbertas: number;
+  vagasTotais: number;
+  candidatosAprovados: number;
+  candidatosFaltantes: number;
+  electionStatus: string;
+}) {
+  const ok = vagasAbertas === 0;
+  const tone = ok
+    ? "border-primary/40 bg-primary/5"
+    : "border-destructive/40 bg-destructive/5";
+  const Icon = ok ? CheckCircle2 : AlertTriangle;
+  const iconColor = ok ? "text-primary" : "text-destructive";
+
+  return (
+    <div className={`rounded-lg border ${tone} p-4`}>
+      <div className="flex items-start gap-3">
+        <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${iconColor}`} />
+        <div className="flex-1">
+          <h3 className="text-sm font-semibold">
+            {ok
+              ? "Todas as vagas foram preenchidas"
+              : `${vagasAbertas} vaga(s) em aberto de ${vagasTotais}`}
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Configuração: <strong className="text-foreground">{vagasTit}</strong> titular(es) e{" "}
+            <strong className="text-foreground">{vagasSup}</strong> suplente(s). Candidatos aprovados:{" "}
+            <strong className="text-foreground">{candidatosAprovados}</strong>.
+          </p>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <VagaLine
+              label="Titulares"
+              preenchidas={tituPreenchidas}
+              total={vagasTit}
+              faltam={tituFaltam}
+            />
+            <VagaLine
+              label="Suplentes"
+              preenchidas={supPreenchidas}
+              total={vagasSup}
+              faltam={supFaltam}
+            />
+          </div>
+
+          {!ok && (
+            <div className="mt-3 rounded-md border border-destructive/30 bg-background/60 p-3 text-xs">
+              <p className="font-semibold text-destructive">Atenção — vagas não preenchidas</p>
+              <ul className="ml-4 mt-1 list-disc space-y-0.5 text-muted-foreground">
+                {tituFaltam > 0 && (
+                  <li>
+                    <strong className="text-foreground">{tituFaltam}</strong> vaga(s) de{" "}
+                    <strong>titular</strong> sem candidato eleito.
+                  </li>
+                )}
+                {supFaltam > 0 && (
+                  <li>
+                    <strong className="text-foreground">{supFaltam}</strong> vaga(s) de{" "}
+                    <strong>suplente</strong> sem candidato eleito.
+                  </li>
+                )}
+                {candidatosFaltantes > 0 && (
+                  <li>
+                    Faltam <strong className="text-foreground">{candidatosFaltantes}</strong> candidato(s)
+                    aprovado(s) para cobrir todas as vagas (mínimo necessário: {vagasTotais}).
+                  </li>
+                )}
+              </ul>
+              <p className="mt-2 text-muted-foreground">
+                {electionStatus === "closed"
+                  ? "Conforme a NR-5, registre o ocorrido na ata e mantenha o processo eleitoral para reabertura de inscrições das vagas remanescentes."
+                  : electionStatus === "voting"
+                    ? "Considere encerrar inscrições somente após confirmar candidatos suficientes, ou reabra inscrições antes da votação terminar."
+                    : "Reabra as inscrições e aprove novos candidatos antes de iniciar a votação."}
+              </p>
+            </div>
+          )}
+
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Critério de desempate: maior nº de votos → inscrição mais antiga → menor número de cédula (NR-5).
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VagaLine({
+  label,
+  preenchidas,
+  total,
+  faltam,
+}: {
+  label: string;
+  preenchidas: number;
+  total: number;
+  faltam: number;
+}) {
+  const pct = total === 0 ? 100 : Math.round((preenchidas / total) * 100);
+  const ok = faltam === 0;
+  return (
+    <div className="rounded-md border border-border bg-card/60 p-2.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium">{label}</span>
+        <span className={ok ? "text-primary" : "text-destructive"}>
+          {preenchidas}/{total} {ok ? "✓" : `· faltam ${faltam}`}
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className={`h-full ${ok ? "bg-primary" : "bg-destructive"}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   );
 }
