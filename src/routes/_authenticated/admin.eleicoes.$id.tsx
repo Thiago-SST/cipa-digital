@@ -465,6 +465,142 @@ function Stat({ label, value }: { label: string; value: string | number }) {
     </div>
   );
 }
+
+function VagasStatusBanner({
+  vagasTit,
+  vagasSup,
+  tituPreenchidas,
+  supPreenchidas,
+  tituFaltam,
+  supFaltam,
+  vagasAbertas,
+  vagasTotais,
+  candidatosAprovados,
+  candidatosFaltantes,
+  electionStatus,
+}: {
+  vagasTit: number;
+  vagasSup: number;
+  tituPreenchidas: number;
+  supPreenchidas: number;
+  tituFaltam: number;
+  supFaltam: number;
+  vagasAbertas: number;
+  vagasTotais: number;
+  candidatosAprovados: number;
+  candidatosFaltantes: number;
+  electionStatus: string;
+}) {
+  const ok = vagasAbertas === 0;
+  const tone = ok
+    ? "border-primary/40 bg-primary/5"
+    : "border-destructive/40 bg-destructive/5";
+  const Icon = ok ? CheckCircle2 : AlertTriangle;
+  const iconColor = ok ? "text-primary" : "text-destructive";
+
+  return (
+    <div className={`rounded-lg border ${tone} p-4`}>
+      <div className="flex items-start gap-3">
+        <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${iconColor}`} />
+        <div className="flex-1">
+          <h3 className="text-sm font-semibold">
+            {ok
+              ? "Todas as vagas foram preenchidas"
+              : `${vagasAbertas} vaga(s) em aberto de ${vagasTotais}`}
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Configuração: <strong className="text-foreground">{vagasTit}</strong> titular(es) e{" "}
+            <strong className="text-foreground">{vagasSup}</strong> suplente(s). Candidatos aprovados:{" "}
+            <strong className="text-foreground">{candidatosAprovados}</strong>.
+          </p>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <VagaLine
+              label="Titulares"
+              preenchidas={tituPreenchidas}
+              total={vagasTit}
+              faltam={tituFaltam}
+            />
+            <VagaLine
+              label="Suplentes"
+              preenchidas={supPreenchidas}
+              total={vagasSup}
+              faltam={supFaltam}
+            />
+          </div>
+
+          {!ok && (
+            <div className="mt-3 rounded-md border border-destructive/30 bg-background/60 p-3 text-xs">
+              <p className="font-semibold text-destructive">Atenção — vagas não preenchidas</p>
+              <ul className="ml-4 mt-1 list-disc space-y-0.5 text-muted-foreground">
+                {tituFaltam > 0 && (
+                  <li>
+                    <strong className="text-foreground">{tituFaltam}</strong> vaga(s) de{" "}
+                    <strong>titular</strong> sem candidato eleito.
+                  </li>
+                )}
+                {supFaltam > 0 && (
+                  <li>
+                    <strong className="text-foreground">{supFaltam}</strong> vaga(s) de{" "}
+                    <strong>suplente</strong> sem candidato eleito.
+                  </li>
+                )}
+                {candidatosFaltantes > 0 && (
+                  <li>
+                    Faltam <strong className="text-foreground">{candidatosFaltantes}</strong> candidato(s)
+                    aprovado(s) para cobrir todas as vagas (mínimo necessário: {vagasTotais}).
+                  </li>
+                )}
+              </ul>
+              <p className="mt-2 text-muted-foreground">
+                {electionStatus === "closed"
+                  ? "Conforme a NR-5, registre o ocorrido na ata e mantenha o processo eleitoral para reabertura de inscrições das vagas remanescentes."
+                  : electionStatus === "voting"
+                    ? "Considere encerrar inscrições somente após confirmar candidatos suficientes, ou reabra inscrições antes da votação terminar."
+                    : "Reabra as inscrições e aprove novos candidatos antes de iniciar a votação."}
+              </p>
+            </div>
+          )}
+
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Critério de desempate: maior nº de votos → inscrição mais antiga → menor número de cédula (NR-5).
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VagaLine({
+  label,
+  preenchidas,
+  total,
+  faltam,
+}: {
+  label: string;
+  preenchidas: number;
+  total: number;
+  faltam: number;
+}) {
+  const pct = total === 0 ? 100 : Math.round((preenchidas / total) * 100);
+  const ok = faltam === 0;
+  return (
+    <div className="rounded-md border border-border bg-card/60 p-2.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium">{label}</span>
+        <span className={ok ? "text-primary" : "text-destructive"}>
+          {preenchidas}/{total} {ok ? "✓" : `· faltam ${faltam}`}
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className={`h-full ${ok ? "bg-primary" : "bg-destructive"}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 function Section({ title, icon: Icon, children }: { title: string; icon?: typeof Award; children: React.ReactNode }) {
   return (
     <section className="rounded-lg border border-border bg-card p-5">
