@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, Play, Square, Plus, Trash2, Printer, Award } from "lucide-react";
+import { ArrowLeft, Play, Square, Plus, Trash2, Printer, Award, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 import {
   getElection,
@@ -397,8 +397,12 @@ function ResultsTab({ electionId }: { electionId: string }) {
   const r = q.data!;
   const turnout = r.stats.eleitoresAptos ? Math.round((r.stats.eleitoresQueVotaram / r.stats.eleitoresAptos) * 100) : 0;
   const vagasTotais = r.stats.vagasTitulares + r.stats.vagasSuplentes;
-  const tituFaltam = Math.max(0, r.stats.vagasTitulares - r.titulares.length);
-  const supFaltam = Math.max(0, r.stats.vagasSuplentes - r.suplentes.length);
+  const tituPreenchidas = r.titulares.length;
+  const supPreenchidas = r.suplentes.length;
+  const tituFaltam = Math.max(0, r.stats.vagasTitulares - tituPreenchidas);
+  const supFaltam = Math.max(0, r.stats.vagasSuplentes - supPreenchidas);
+  const vagasAbertas = tituFaltam + supFaltam;
+  const candidatosFaltantes = Math.max(0, vagasTotais - r.stats.candidatosAprovados);
 
   return (
     <div className="space-y-6">
@@ -408,31 +412,37 @@ function ResultsTab({ electionId }: { electionId: string }) {
         <Stat label="Comparecimento" value={`${turnout}%`} />
       </div>
 
-      <div className="rounded-md border border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
-        Vagas configuradas: <strong className="text-foreground">{r.stats.vagasTitulares}</strong> titulares
-        e <strong className="text-foreground">{r.stats.vagasSuplentes}</strong> suplentes
-        (total {vagasTotais}). Candidatos aprovados: {r.stats.candidatosAprovados}.
-        {(tituFaltam > 0 || supFaltam > 0) && (
-          <span className="ml-1 text-destructive">
-            Faltam candidatos para preencher {tituFaltam > 0 && `${tituFaltam} titular(es)`}
-            {tituFaltam > 0 && supFaltam > 0 && " e "}
-            {supFaltam > 0 && `${supFaltam} suplente(s)`}.
-          </span>
-        )}
-        <div className="mt-1">
-          Critério de desempate: maior nº de votos → inscrição mais antiga → menor número de cédula (NR-5).
-        </div>
-      </div>
+      <VagasStatusBanner
+        vagasTit={r.stats.vagasTitulares}
+        vagasSup={r.stats.vagasSuplentes}
+        tituPreenchidas={tituPreenchidas}
+        supPreenchidas={supPreenchidas}
+        tituFaltam={tituFaltam}
+        supFaltam={supFaltam}
+        vagasAbertas={vagasAbertas}
+        vagasTotais={vagasTotais}
+        candidatosAprovados={r.stats.candidatosAprovados}
+        candidatosFaltantes={candidatosFaltantes}
+        electionStatus={r.election.status}
+      />
 
       <Section title={`Titulares eleitos (${r.titulares.length}/${r.stats.vagasTitulares})`} icon={Award}>
-        {r.titulares.length ? (
-          <ResultsTable rows={r.titulares} />
-        ) : (
-          <p className="text-sm text-muted-foreground">Sem dados.</p>
+        {r.titulares.length ? <ResultsTable rows={r.titulares} /> : <p className="text-sm text-muted-foreground">Sem dados.</p>}
+        {tituFaltam > 0 && (
+          <p className="mt-3 flex items-center gap-1.5 text-xs text-destructive">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {tituFaltam} vaga(s) de titular em aberto — sem candidatos aprovados suficientes.
+          </p>
         )}
       </Section>
       <Section title={`Suplentes (${r.suplentes.length}/${r.stats.vagasSuplentes})`}>
         {r.suplentes.length ? <ResultsTable rows={r.suplentes} /> : <p className="text-sm text-muted-foreground">Sem dados.</p>}
+        {supFaltam > 0 && (
+          <p className="mt-3 flex items-center gap-1.5 text-xs text-destructive">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {supFaltam} vaga(s) de suplente em aberto — sem candidatos aprovados suficientes.
+          </p>
+        )}
       </Section>
       <Section title="Ranking completo">
         <ResultsTable rows={r.ranking} showClass />
