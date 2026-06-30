@@ -12,6 +12,7 @@ import {
   deleteCandidate,
   getElectionResults,
   saveAta,
+  upsertElection,
 } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/eleicoes/$id")({
@@ -102,14 +103,143 @@ function ElectionDetail() {
   );
 }
 
-function DetailsTab({ el }: { el: { descricao: string | null; data_inicio_votacao: string | null; data_fim_votacao: string | null } }) {
+function DetailsTab({
+  el,
+}: {
+  el: {
+    id: string;
+    nome: string;
+    descricao: string | null;
+    data_inicio_inscricao: string | null;
+    data_fim_inscricao: string | null;
+    data_inicio_votacao: string | null;
+    data_fim_votacao: string | null;
+    vagas_titulares: number;
+    vagas_suplentes: number;
+    status: string;
+  };
+}) {
   return (
-    <div className="rounded-lg border border-border bg-card p-5 text-sm">
-      <dl className="grid gap-3 sm:grid-cols-2">
-        <Info label="Descrição" value={el.descricao ?? "—"} />
-        <Info label="Início da votação" value={fmt(el.data_inicio_votacao)} />
-        <Info label="Fim da votação" value={fmt(el.data_fim_votacao)} />
-      </dl>
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-card p-5 text-sm">
+        <dl className="grid gap-3 sm:grid-cols-2">
+          <Info label="Descrição" value={el.descricao ?? "—"} />
+          <Info label="Início da votação" value={fmt(el.data_inicio_votacao)} />
+          <Info label="Fim da votação" value={fmt(el.data_fim_votacao)} />
+        </dl>
+      </div>
+      <SeatsEditor el={el} />
+    </div>
+  );
+}
+
+function SeatsEditor({
+  el,
+}: {
+  el: {
+    id: string;
+    nome: string;
+    descricao: string | null;
+    data_inicio_inscricao: string | null;
+    data_fim_inscricao: string | null;
+    data_inicio_votacao: string | null;
+    data_fim_votacao: string | null;
+    vagas_titulares: number;
+    vagas_suplentes: number;
+    status: string;
+  };
+}) {
+  const fnUpsert = useServerFn(upsertElection);
+  const qc = useQueryClient();
+  const [titulares, setTitulares] = useState(el.vagas_titulares);
+  const [suplentes, setSuplentes] = useState(el.vagas_suplentes);
+  const locked = el.status === "voting" || el.status === "closed";
+
+  const m = useMutation({
+    mutationFn: () =>
+      fnUpsert({
+        data: {
+          id: el.id,
+          nome: el.nome,
+          descricao: el.descricao,
+          data_inicio_inscricao: el.data_inicio_inscricao,
+          data_fim_inscricao: el.data_fim_inscricao,
+          data_inicio_votacao: el.data_inicio_votacao,
+          data_fim_votacao: el.data_fim_votacao,
+          vagas_titulares: Number(titulares),
+          vagas_suplentes: Number(suplentes),
+        },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-election", el.id] });
+      qc.invalidateQueries({ queryKey: ["admin-elections"] });
+      qc.invalidateQueries({ queryKey: ["admin-results", el.id] });
+    },
+  });
+
+  const dirty = titulares !== el.vagas_titulares || suplentes !== el.vagas_suplentes;
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">Vagas da CIPA</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Define quantos titulares e suplentes serão eleitos. A apuração usa estes valores para
+            separar a chapa eleita.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <label className="block text-xs font-medium">
+          Vagas titulares
+          <input
+            type="number"
+            min={1}
+            max={50}
+            disabled={locked}
+            value={titulares}
+            onChange={(e) => setTitulares(Number(e.target.value))}
+            className={`${inputCls} mt-1 disabled:cursor-not-allowed disabled:opacity-60`}
+          />
+        </label>
+        <label className="block text-xs font-medium">
+          Vagas suplentes
+          <input
+            type="number"
+            min={0}
+            max={50}
+            disabled={locked}
+            value={suplentes}
+            onChange={(e) => setSuplentes(Number(e.target.value))}
+            className={`${inputCls} mt-1 disabled:cursor-not-allowed disabled:opacity-60`}
+          />
+        </label>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          Total de eleitos: <strong>{Number(titulares) + Number(suplentes)}</strong>
+        </p>
+        <div className="flex items-center gap-2">
+          {locked && (
+            <span className="text-xs text-muted-foreground">
+              Eleição {el.status === "voting" ? "em votação" : "encerrada"} — vagas bloqueadas.
+            </span>
+          )}
+          {m.error && <span className="text-xs text-destructive">{(m.error as Error).message}</span>}
+          {m.isSuccess && !dirty && <span className="text-xs text-primary">Vagas atualizadas.</span>}
+          <button
+            type="button"
+            disabled={locked || !dirty || m.isPending}
+            onClick={() => m.mutate()}
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+          >
+            {m.isPending ? "Salvando..." : "Salvar vagas"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
