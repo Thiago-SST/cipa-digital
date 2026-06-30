@@ -296,7 +296,7 @@ export const getElectionResults = createServerFn({ method: "GET" })
           .single(),
         sb
           .from("candidates")
-          .select("id, nome, matricula, setor, cargo, numero, status")
+          .select("id, nome, matricula, setor, cargo, numero, status, created_at")
           .eq("election_id", data.electionId)
           .eq("status", "approved"),
         sb.from("votes").select("candidate_id").eq("election_id", data.electionId),
@@ -310,12 +310,33 @@ export const getElectionResults = createServerFn({ method: "GET" })
     const tally = new Map<string, number>();
     (votes ?? []).forEach((v) => tally.set(v.candidate_id, (tally.get(v.candidate_id) ?? 0) + 1));
 
-    const ranking = (candidates ?? [])
-      .map((c) => ({ ...c, votos: tally.get(c.id) ?? 0 }))
-      .sort((a, b) => b.votos - a.votos || (a.numero ?? 9999) - (b.numero ?? 9999));
+    const vagasTit = el!.vagas_titulares;
+    const vagasSup = el!.vagas_suplentes;
 
-    const titulares = ranking.slice(0, el!.vagas_titulares);
-    const suplentes = ranking.slice(el!.vagas_titulares, el!.vagas_titulares + el!.vagas_suplentes);
+    // Ranking: 1) mais votos, 2) inscrição mais antiga (NR-5 — proxy de tempo na empresa),
+    // 3) menor número de cédula
+    const ordered = (candidates ?? [])
+      .map((c) => ({ ...c, votos: tally.get(c.id) ?? 0 }))
+      .sort(
+        (a, b) =>
+          b.votos - a.votos ||
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime() ||
+          (a.numero ?? 9999) - (b.numero ?? 9999),
+      );
+
+    const ranking = ordered.map((c, i) => {
+      const posicao = i + 1;
+      const classificacao: "titular" | "suplente" | "nao_eleito" =
+        posicao <= vagasTit
+          ? "titular"
+          : posicao <= vagasTit + vagasSup
+            ? "suplente"
+            : "nao_eleito";
+      return { ...c, posicao, classificacao };
+    });
+
+    const titulares = ranking.filter((c) => c.classificacao === "titular");
+    const suplentes = ranking.filter((c) => c.classificacao === "suplente");
 
     return {
       election: el!,
@@ -326,6 +347,9 @@ export const getElectionResults = createServerFn({ method: "GET" })
         totalVotos: votes?.length ?? 0,
         eleitoresQueVotaram: tokenCount ?? 0,
         eleitoresAptos: eligible ?? 0,
+        vagasTitulares: vagasTit,
+        vagasSuplentes: vagasSup,
+        candidatosAprovados: ranking.length,
       },
     };
   });
