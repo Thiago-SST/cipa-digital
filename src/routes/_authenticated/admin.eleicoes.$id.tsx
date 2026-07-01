@@ -13,13 +13,18 @@ import {
   getElectionResults,
   saveAta,
   upsertElection,
+  listAtas,
+  uploadElectionDocument,
+  getDocumentSignedUrl,
+  deleteElectionDocument,
+  exportElectionData,
 } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/eleicoes/$id")({
   component: ElectionDetail,
 });
 
-type Tab = "detalhes" | "candidatos" | "apuracao" | "ata";
+type Tab = "detalhes" | "candidatos" | "apuracao" | "ata" | "documentos";
 
 function ElectionDetail() {
   const { id } = Route.useParams();
@@ -81,8 +86,8 @@ function ElectionDetail() {
         </div>
       </header>
 
-      <nav className="flex gap-1 border-b border-border">
-        {(["detalhes", "candidatos", "apuracao", "ata"] as Tab[]).map((t) => (
+      <nav className="flex flex-wrap gap-1 border-b border-border">
+        {(["detalhes", "candidatos", "apuracao", "ata", "documentos"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -99,6 +104,205 @@ function ElectionDetail() {
       {tab === "candidatos" && <CandidatesTab electionId={id} />}
       {tab === "apuracao" && <ResultsTab electionId={id} />}
       {tab === "ata" && <AtaTab electionId={id} />}
+      {tab === "documentos" && <DocumentsTab electionId={id} />}
+    </div>
+  );
+}
+
+function DocumentsTab({ electionId }: { electionId: string }) {
+  const qc = useQueryClient();
+  const listFn = useServerFn(listAtas);
+  const upFn = useServerFn(uploadElectionDocument);
+  const urlFn = useServerFn(getDocumentSignedUrl);
+  const delFn = useServerFn(deleteElectionDocument);
+  const exportFn = useServerFn(exportElectionData);
+
+  const q = useQuery({
+    queryKey: ["election-docs", electionId],
+    queryFn: () => listFn({ data: { electionId } }),
+  });
+
+  const [tipo, setTipo] = useState<"edital" | "abertura" | "encerramento" | "outro">("edital");
+  const [titulo, setTitulo] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function handleUpload(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!file) {
+      setError("Selecione um arquivo.");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setError("Arquivo maior que 8 MB.");
+      return;
+    }
+    setPending(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let bin = "";
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      const fileBase64 = btoa(bin);
+      await upFn({
+        data: {
+          electionId,
+          tipo,
+          titulo: titulo || file.name,
+          fileName: file.name,
+          fileBase64,
+          mimeType: file.type || "application/octet-stream",
+        },
+      });
+      setTitulo("");
+      setFile(null);
+      (document.getElementById("doc-file") as HTMLInputElement | null)?.value &&
+        ((document.getElementById("doc-file") as HTMLInputElement).value = "");
+      qc.invalidateQueries({ queryKey: ["election-docs", electionId] });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function openDoc(path: string) {
+    const { url } = await urlFn({ data: { path } });
+    window.open(url, "_blank", "noopener");
+  }
+
+  async function exportCsv(kind: "candidatos" | "votantes" | "resultado") {
+    const { csv, filename } = await exportFn({ data: { electionId, kind } });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h2 className="text-sm font-semibold">Enviar documento assinado (PDF)</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Edital de convocação, ata de abertura, ata de encerramento e demais comprovantes.
+        </p>
+        <form onSubmit={handleUpload} className="mt-4 grid gap-3 sm:grid-cols-4">
+          <label className="sm:col-span-1">
+            <span className="text-xs text-muted-foreground">Tipo</span>
+            <select
+              value={tipo}
+              onChange={(e) => setTipo(e.target.value as typeof tipo)}
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="edital">Edital</option>
+              <option value="abertura">Ata de abertura</option>
+              <option value="encerramento">Ata de encerramento</option>
+              <option value="outro">Outro</option>
+            </select>
+          </label>
+          <label className="sm:col-span-2">
+            <span className="text-xs text-muted-foreground">Título</span>
+            <input
+              value={titulo}
+              onChange={(e) => setTitulo(e.target.value)}
+              placeholder="Ex.: Edital 001/2026"
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="sm:col-span-1">
+            <span className="text-xs text-muted-foreground">Arquivo</span>
+            <input
+              id="doc-file"
+              type="file"
+              accept="application/pdf,image/*"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="mt-1 w-full text-xs"
+            />
+          </label>
+          {error && (
+            <p className="sm:col-span-4 text-xs text-destructive">{error}</p>
+          )}
+          <div className="sm:col-span-4 flex justify-end">
+            <button
+              disabled={pending}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+            >
+              {pending ? "Enviando..." : "Enviar"}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h2 className="text-sm font-semibold">Documentos e atas arquivados</h2>
+        <ul className="mt-3 divide-y divide-border text-sm">
+          {(q.data ?? []).map((d) => (
+            <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <div>
+                <div className="font-medium text-foreground">{d.titulo}</div>
+                <div className="text-xs text-muted-foreground">
+                  {d.tipo} · {new Date(d.created_at).toLocaleString("pt-BR")}
+                  {d.file_name ? ` · ${d.file_name}` : ""}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {d.file_path && (
+                  <button
+                    onClick={() => openDoc(d.file_path!)}
+                    className="rounded-md border border-border bg-background px-3 py-1 text-xs hover:bg-muted"
+                  >
+                    Abrir
+                  </button>
+                )}
+                <button
+                  onClick={async () => {
+                    if (!confirm("Remover este documento?")) return;
+                    await delFn({ data: { id: d.id } });
+                    qc.invalidateQueries({ queryKey: ["election-docs", electionId] });
+                  }}
+                  className="rounded-md border border-destructive/30 bg-background px-3 py-1 text-xs text-destructive hover:bg-destructive/10"
+                >
+                  Remover
+                </button>
+              </div>
+            </li>
+          ))}
+          {q.data && q.data.length === 0 && (
+            <li className="py-4 text-xs text-muted-foreground">Nenhum documento.</li>
+          )}
+        </ul>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h2 className="text-sm font-semibold">Exportar dados (CSV)</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Listas úteis para auditoria e fiscalização. Não expõem em quem cada eleitor votou.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            onClick={() => exportCsv("candidatos")}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-muted"
+          >
+            Candidatos
+          </button>
+          <button
+            onClick={() => exportCsv("votantes")}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-muted"
+          >
+            Votantes (quem compareceu)
+          </button>
+          <button
+            onClick={() => exportCsv("resultado")}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-muted"
+          >
+            Resultado consolidado
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
