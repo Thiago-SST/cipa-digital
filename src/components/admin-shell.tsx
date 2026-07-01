@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Vote, Users, LogOut, ShieldCheck, FileText } from "lucide-react";
+import { LayoutDashboard, Vote, Users, LogOut, ShieldCheck, FileText, Settings, ScrollText } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -9,6 +9,8 @@ const nav = [
   { to: "/admin/eleicoes", label: "Eleições", icon: Vote },
   { to: "/admin/empregados", label: "Empregados", icon: Users },
   { to: "/admin/atas", label: "Atas e documentos", icon: FileText },
+  { to: "/admin/auditoria", label: "Auditoria", icon: ScrollText },
+  { to: "/admin/configuracoes", label: "Configurações", icon: Settings },
 ];
 
 export function AdminShell({ children, email }: { children: ReactNode; email?: string | null }) {

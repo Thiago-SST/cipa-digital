@@ -299,7 +299,7 @@ export const getElectionResults = createServerFn({ method: "GET" })
           .select("id, nome, matricula, setor, cargo, numero, status, created_at")
           .eq("election_id", data.electionId)
           .eq("status", "approved"),
-        sb.from("votes").select("candidate_id").eq("election_id", data.electionId),
+        sb.from("votes").select("candidate_id, tipo").eq("election_id", data.electionId),
         sb
           .from("vote_tokens")
           .select("id", { count: "exact", head: true })
@@ -308,7 +308,17 @@ export const getElectionResults = createServerFn({ method: "GET" })
       ]);
 
     const tally = new Map<string, number>();
-    (votes ?? []).forEach((v) => tally.set(v.candidate_id, (tally.get(v.candidate_id) ?? 0) + 1));
+    let votosNominais = 0;
+    let votosBrancos = 0;
+    let votosNulos = 0;
+    (votes ?? []).forEach((v) => {
+      if (v.tipo === "branco") votosBrancos += 1;
+      else if (v.tipo === "nulo") votosNulos += 1;
+      else if (v.candidate_id) {
+        votosNominais += 1;
+        tally.set(v.candidate_id, (tally.get(v.candidate_id) ?? 0) + 1);
+      }
+    });
 
     const vagasTit = el!.vagas_titulares;
     const vagasSup = el!.vagas_suplentes;
@@ -345,6 +355,9 @@ export const getElectionResults = createServerFn({ method: "GET" })
       suplentes,
       stats: {
         totalVotos: votes?.length ?? 0,
+        votosNominais,
+        votosBrancos,
+        votosNulos,
         eleitoresQueVotaram: tokenCount ?? 0,
         eleitoresAptos: eligible ?? 0,
         vagasTitulares: vagasTit,
@@ -391,4 +404,208 @@ export const listAtas = createServerFn({ method: "GET" })
       .eq("election_id", data.electionId)
       .order("created_at", { ascending: false });
     return list ?? [];
+  });
+
+/* ============ DOCUMENTOS (upload de PDF) ============ */
+export const uploadElectionDocument = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        electionId: z.string().uuid(),
+        tipo: z.enum(["edital", "abertura", "encerramento", "outro"]),
+        titulo: z.string().trim().min(3).max(200),
+        fileName: z.string().trim().min(1).max(200),
+        fileBase64: z.string().min(10),
+        mimeType: z.string().trim().min(3).max(120),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const bytes = Uint8Array.from(atob(data.fileBase64), (c) => c.charCodeAt(0));
+    const safeName = data.fileName.replace(/[^\w.\-]+/g, "_");
+    const path = `${data.electionId}/${Date.now()}-${safeName}`;
+    const { error: upErr } = await sb.storage
+      .from("election-documents")
+      .upload(path, bytes, { contentType: data.mimeType, upsert: false });
+    if (upErr) throw new Error(upErr.message);
+    const { error: dbErr } = await sb.from("election_documents").insert({
+      election_id: data.electionId,
+      tipo: data.tipo,
+      titulo: data.titulo,
+      file_path: path,
+      file_name: data.fileName,
+      created_by: context.userId,
+    });
+    if (dbErr) throw new Error(dbErr.message);
+    await sb.from("access_logs").insert({
+      ator: context.userId,
+      acao: "document.upload",
+      detalhes: { electionId: data.electionId, tipo: data.tipo },
+    });
+    return { ok: true };
+  });
+
+export const getDocumentSignedUrl = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ path: z.string().min(1) }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { data: url, error } = await sb.storage
+      .from("election-documents")
+      .createSignedUrl(data.path, 60 * 10);
+    if (error) throw new Error(error.message);
+    return { url: url.signedUrl };
+  });
+
+export const deleteElectionDocument = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { data: doc } = await sb
+      .from("election_documents")
+      .select("file_path")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (doc?.file_path) {
+      await sb.storage.from("election-documents").remove([doc.file_path]);
+    }
+    const { error } = await sb.from("election_documents").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/* ============ EXPORTAÇÕES CSV ============ */
+function toCsv(rows: Array<Record<string, unknown>>): string {
+  if (!rows.length) return "";
+  const headers = Object.keys(rows[0]);
+  const escape = (v: unknown) => {
+    const s = v == null ? "" : String(v);
+    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [headers.join(";")];
+  for (const r of rows) lines.push(headers.map((h) => escape(r[h])).join(";"));
+  return lines.join("\n");
+}
+
+export const exportElectionData = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        electionId: z.string().uuid(),
+        kind: z.enum(["candidatos", "votantes", "resultado"]),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    if (data.kind === "candidatos") {
+      const { data: rows } = await sb
+        .from("candidates")
+        .select("numero, nome, matricula, setor, cargo, status, origem, created_at")
+        .eq("election_id", data.electionId)
+        .order("numero", { ascending: true, nullsFirst: false });
+      return { csv: toCsv(rows ?? []), filename: "candidatos.csv" };
+    }
+    if (data.kind === "votantes") {
+      const { data: tokens } = await sb
+        .from("vote_tokens")
+        .select("voted_at, employees(nome, matricula, setor)")
+        .eq("election_id", data.electionId);
+      const flat = (tokens ?? []).map((t) => ({
+        nome: (t.employees as { nome?: string } | null)?.nome ?? "",
+        matricula: (t.employees as { matricula?: string } | null)?.matricula ?? "",
+        setor: (t.employees as { setor?: string } | null)?.setor ?? "",
+        votou_em: t.voted_at,
+      }));
+      return { csv: toCsv(flat), filename: "votantes.csv" };
+    }
+    // resultado
+    const { data: votes } = await sb
+      .from("votes")
+      .select("candidate_id, tipo")
+      .eq("election_id", data.electionId);
+    const { data: cands } = await sb
+      .from("candidates")
+      .select("id, numero, nome, matricula, setor")
+      .eq("election_id", data.electionId)
+      .eq("status", "approved");
+    const tally = new Map<string, number>();
+    let brancos = 0;
+    let nulos = 0;
+    (votes ?? []).forEach((v) => {
+      if (v.tipo === "branco") brancos += 1;
+      else if (v.tipo === "nulo") nulos += 1;
+      else if (v.candidate_id)
+        tally.set(v.candidate_id, (tally.get(v.candidate_id) ?? 0) + 1);
+    });
+    const rows = (cands ?? [])
+      .map((c) => ({
+        numero: c.numero ?? "",
+        nome: c.nome,
+        matricula: c.matricula,
+        setor: c.setor ?? "",
+        votos: tally.get(c.id) ?? 0,
+      }))
+      .sort((a, b) => Number(b.votos) - Number(a.votos));
+    rows.push({ numero: "", nome: "Votos em branco", matricula: "", setor: "", votos: brancos });
+    rows.push({ numero: "", nome: "Votos nulos", matricula: "", setor: "", votos: nulos });
+    return { csv: toCsv(rows), filename: "resultado.csv" };
+  });
+
+/* ============ CONFIGURAÇÕES DA ORGANIZAÇÃO ============ */
+const orgSchema = z.object({
+  nome: z.string().trim().min(2).max(120),
+  cnpj: z.string().trim().max(20).optional().nullable(),
+  endereco: z.string().trim().max(300).optional().nullable(),
+  mandato_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  mandato_fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  texto_edital: z.string().trim().max(4000).optional().nullable(),
+});
+
+export const getOrgSettings = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { data } = await sb.from("organization_settings").select("*").limit(1).maybeSingle();
+    return data;
+  });
+
+export const updateOrgSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => orgSchema.parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { data: existing } = await sb
+      .from("organization_settings")
+      .select("id")
+      .limit(1)
+      .maybeSingle();
+    const payload = { ...data, updated_by: context.userId, updated_at: new Date().toISOString() };
+    if (existing) {
+      const { error } = await sb.from("organization_settings").update(payload).eq("id", existing.id);
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await sb
+        .from("organization_settings")
+        .insert({ ...payload, singleton: true });
+      if (error) throw new Error(error.message);
+    }
+    return { ok: true };
+  });
+
+/* ============ AUDITORIA ============ */
+export const listAuditEvents = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { data } = await sb
+      .from("access_logs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    return data ?? [];
   });
