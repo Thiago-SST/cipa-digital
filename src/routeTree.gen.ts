@@ -21,6 +21,7 @@ import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminEmpregadosRouteImport } from './routes/_authenticated/admin.empregados'
 import { Route as AuthenticatedAdminEleicoesRouteImport } from './routes/_authenticated/admin.eleicoes'
 import { Route as AuthenticatedAdminConfiguracoesRouteImport } from './routes/_authenticated/admin.configuracoes'
+import { Route as AuthenticatedAdminAuditoriaRouteImport } from './routes/_authenticated/admin.auditoria'
 import { Route as AuthenticatedAdminAtasRouteImport } from './routes/_authenticated/admin.atas'
 import { Route as AuthenticatedAdminEleicoesIdRouteImport } from './routes/_authenticated/admin.eleicoes.$id'
 
@@ -86,6 +87,12 @@ const AuthenticatedAdminConfiguracoesRoute =
     path: '/configuracoes',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminAuditoriaRoute =
+  AuthenticatedAdminAuditoriaRouteImport.update({
+    id: '/auditoria',
+    path: '/auditoria',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminAtasRoute = AuthenticatedAdminAtasRouteImport.update({
   id: '/atas',
   path: '/atas',
@@ -107,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar/': typeof VotarIndexRoute
   '/admin/atas': typeof AuthenticatedAdminAtasRoute
+  '/admin/auditoria': typeof AuthenticatedAdminAuditoriaRoute
   '/admin/configuracoes': typeof AuthenticatedAdminConfiguracoesRoute
   '/admin/eleicoes': typeof AuthenticatedAdminEleicoesRouteWithChildren
   '/admin/empregados': typeof AuthenticatedAdminEmpregadosRoute
@@ -121,6 +129,7 @@ export interface FileRoutesByTo {
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar': typeof VotarIndexRoute
   '/admin/atas': typeof AuthenticatedAdminAtasRoute
+  '/admin/auditoria': typeof AuthenticatedAdminAuditoriaRoute
   '/admin/configuracoes': typeof AuthenticatedAdminConfiguracoesRoute
   '/admin/eleicoes': typeof AuthenticatedAdminEleicoesRouteWithChildren
   '/admin/empregados': typeof AuthenticatedAdminEmpregadosRoute
@@ -138,6 +147,7 @@ export interface FileRoutesById {
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar/': typeof VotarIndexRoute
   '/_authenticated/admin/atas': typeof AuthenticatedAdminAtasRoute
+  '/_authenticated/admin/auditoria': typeof AuthenticatedAdminAuditoriaRoute
   '/_authenticated/admin/configuracoes': typeof AuthenticatedAdminConfiguracoesRoute
   '/_authenticated/admin/eleicoes': typeof AuthenticatedAdminEleicoesRouteWithChildren
   '/_authenticated/admin/empregados': typeof AuthenticatedAdminEmpregadosRoute
@@ -155,6 +165,7 @@ export interface FileRouteTypes {
     | '/votar/confirmado'
     | '/votar/'
     | '/admin/atas'
+    | '/admin/auditoria'
     | '/admin/configuracoes'
     | '/admin/eleicoes'
     | '/admin/empregados'
@@ -169,6 +180,7 @@ export interface FileRouteTypes {
     | '/votar/confirmado'
     | '/votar'
     | '/admin/atas'
+    | '/admin/auditoria'
     | '/admin/configuracoes'
     | '/admin/eleicoes'
     | '/admin/empregados'
@@ -185,6 +197,7 @@ export interface FileRouteTypes {
     | '/votar/confirmado'
     | '/votar/'
     | '/_authenticated/admin/atas'
+    | '/_authenticated/admin/auditoria'
     | '/_authenticated/admin/configuracoes'
     | '/_authenticated/admin/eleicoes'
     | '/_authenticated/admin/empregados'
@@ -288,6 +301,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminConfiguracoesRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/auditoria': {
+      id: '/_authenticated/admin/auditoria'
+      path: '/auditoria'
+      fullPath: '/admin/auditoria'
+      preLoaderRoute: typeof AuthenticatedAdminAuditoriaRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/admin/atas': {
       id: '/_authenticated/admin/atas'
       path: '/atas'
@@ -321,6 +341,7 @@ const AuthenticatedAdminEleicoesRouteWithChildren =
 
 interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminAtasRoute: typeof AuthenticatedAdminAtasRoute
+  AuthenticatedAdminAuditoriaRoute: typeof AuthenticatedAdminAuditoriaRoute
   AuthenticatedAdminConfiguracoesRoute: typeof AuthenticatedAdminConfiguracoesRoute
   AuthenticatedAdminEleicoesRoute: typeof AuthenticatedAdminEleicoesRouteWithChildren
   AuthenticatedAdminEmpregadosRoute: typeof AuthenticatedAdminEmpregadosRoute
@@ -329,6 +350,7 @@ interface AuthenticatedAdminRouteChildren {
 
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminAtasRoute: AuthenticatedAdminAtasRoute,
+  AuthenticatedAdminAuditoriaRoute: AuthenticatedAdminAuditoriaRoute,
   AuthenticatedAdminConfiguracoesRoute: AuthenticatedAdminConfiguracoesRoute,
   AuthenticatedAdminEleicoesRoute: AuthenticatedAdminEleicoesRouteWithChildren,
   AuthenticatedAdminEmpregadosRoute: AuthenticatedAdminEmpregadosRoute,
