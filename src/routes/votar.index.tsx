@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { LogIn, AlertCircle } from "lucide-react";
+import { LogIn, AlertCircle, Vote, ClipboardEdit, CalendarClock } from "lucide-react";
 
-import { voterLogin } from "@/lib/voter.functions";
+import { voterLogin, getActiveElectionInfo } from "@/lib/voter.functions";
 import { VoterShell } from "@/components/voter-shell";
 
 export const Route = createFileRoute("/votar/")({
@@ -20,6 +20,8 @@ export const Route = createFileRoute("/votar/")({
 function VotarLogin() {
   const navigate = useNavigate();
   const login = useServerFn(voterLogin);
+  const infoFn = useServerFn(getActiveElectionInfo);
+  const info = useQuery({ queryKey: ["voter-info"], queryFn: () => infoFn() });
   const [identificador, setIdentificador] = useState("");
   const [data, setData] = useState("");
 
@@ -29,9 +31,37 @@ function VotarLogin() {
     onSuccess: () => navigate({ to: "/votar/cedula" }),
   });
 
+  const election = info.data?.election ?? null;
+  const votingOpen = info.data?.votingOpen ?? false;
+  const registrationOpen = info.data?.registrationOpen ?? false;
+
   return (
     <VoterShell>
       <div className="mx-auto max-w-md">
+        {election ? (
+          <div className="mb-6 rounded-lg border border-primary/30 bg-primary/5 p-4">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">
+              {votingOpen ? <Vote className="h-3.5 w-3.5" /> : <CalendarClock className="h-3.5 w-3.5" />}
+              {votingOpen
+                ? "Votação em andamento"
+                : registrationOpen
+                  ? "Inscrições de candidatos abertas"
+                  : "Eleição divulgada"}
+            </div>
+            <div className="mt-1 text-base font-semibold text-foreground">{election.nome}</div>
+            {election.descricao && (
+              <p className="mt-1 text-sm text-muted-foreground">{election.descricao}</p>
+            )}
+            <p className="mt-2 text-xs text-muted-foreground">
+              Vagas: {election.vagas_titulares} titulares · {election.vagas_suplentes} suplentes
+            </p>
+          </div>
+        ) : info.isFetched ? (
+          <div className="mb-6 rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+            Nenhuma eleição divulgada no momento.
+          </div>
+        ) : null}
+
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           Identificação do eleitor
         </h1>
@@ -98,6 +128,16 @@ function VotarLogin() {
             <code className="rounded bg-muted px-1">1990-05-12</code>
           </p>
         </form>
+
+        {registrationOpen && (
+          <a
+            href="/candidatar"
+            className="mt-4 flex items-center justify-center gap-2 rounded-md border border-primary/40 bg-card px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5"
+          >
+            <ClipboardEdit className="h-4 w-4" />
+            Quero me candidatar
+          </a>
+        )}
       </div>
     </VoterShell>
   );

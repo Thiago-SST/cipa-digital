@@ -52,6 +52,7 @@ export type Database = {
           matricula: string
           nome: string
           numero: number | null
+          origem: Database["public"]["Enums"]["candidate_origem"]
           proposta: string | null
           setor: string | null
           status: Database["public"]["Enums"]["candidate_status"]
@@ -66,6 +67,7 @@ export type Database = {
           matricula: string
           nome: string
           numero?: number | null
+          origem?: Database["public"]["Enums"]["candidate_origem"]
           proposta?: string | null
           setor?: string | null
           status?: Database["public"]["Enums"]["candidate_status"]
@@ -80,6 +82,7 @@ export type Database = {
           matricula?: string
           nome?: string
           numero?: number | null
+          origem?: Database["public"]["Enums"]["candidate_origem"]
           proposta?: string | null
           setor?: string | null
           status?: Database["public"]["Enums"]["candidate_status"]
@@ -107,6 +110,8 @@ export type Database = {
           created_at: string
           created_by: string | null
           election_id: string
+          file_name: string | null
+          file_path: string | null
           id: string
           tipo: string
           titulo: string
@@ -116,6 +121,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           election_id: string
+          file_name?: string | null
+          file_path?: string | null
           id?: string
           tipo: string
           titulo: string
@@ -125,6 +132,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           election_id?: string
+          file_name?: string | null
+          file_path?: string | null
           id?: string
           tipo?: string
           titulo?: string
@@ -223,6 +232,45 @@ export type Database = {
         }
         Relationships: []
       }
+      organization_settings: {
+        Row: {
+          cnpj: string | null
+          endereco: string | null
+          id: string
+          mandato_fim: string | null
+          mandato_inicio: string | null
+          nome: string
+          singleton: boolean
+          texto_edital: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          cnpj?: string | null
+          endereco?: string | null
+          id?: string
+          mandato_fim?: string | null
+          mandato_inicio?: string | null
+          nome?: string
+          singleton?: boolean
+          texto_edital?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          cnpj?: string | null
+          endereco?: string | null
+          id?: string
+          mandato_fim?: string | null
+          mandato_inicio?: string | null
+          nome?: string
+          singleton?: boolean
+          texto_edital?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -282,22 +330,25 @@ export type Database = {
       }
       votes: {
         Row: {
-          candidate_id: string
+          candidate_id: string | null
           created_at: string
           election_id: string
           id: string
+          tipo: Database["public"]["Enums"]["vote_type"]
         }
         Insert: {
-          candidate_id: string
+          candidate_id?: string | null
           created_at?: string
           election_id: string
           id?: string
+          tipo?: Database["public"]["Enums"]["vote_type"]
         }
         Update: {
-          candidate_id?: string
+          candidate_id?: string | null
           created_at?: string
           election_id?: string
           id?: string
+          tipo?: Database["public"]["Enums"]["vote_type"]
         }
         Relationships: [
           {
@@ -331,8 +382,10 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "organizador"
+      candidate_origem: "admin" | "auto"
       candidate_status: "pending" | "approved" | "rejected"
       election_status: "draft" | "registration" | "voting" | "closed"
+      vote_type: "nominal" | "branco" | "nulo"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -461,8 +514,10 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "organizador"],
+      candidate_origem: ["admin", "auto"],
       candidate_status: ["pending", "approved", "rejected"],
       election_status: ["draft", "registration", "voting", "closed"],
+      vote_type: ["nominal", "branco", "nulo"],
     },
   },
 } as const

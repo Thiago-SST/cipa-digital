@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as CandidatarRouteImport } from './routes/candidatar'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
@@ -19,9 +20,15 @@ import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as AuthenticatedAdminEmpregadosRouteImport } from './routes/_authenticated/admin.empregados'
 import { Route as AuthenticatedAdminEleicoesRouteImport } from './routes/_authenticated/admin.eleicoes'
+import { Route as AuthenticatedAdminConfiguracoesRouteImport } from './routes/_authenticated/admin.configuracoes'
 import { Route as AuthenticatedAdminAtasRouteImport } from './routes/_authenticated/admin.atas'
 import { Route as AuthenticatedAdminEleicoesIdRouteImport } from './routes/_authenticated/admin.eleicoes.$id'
 
+const CandidatarRoute = CandidatarRouteImport.update({
+  id: '/candidatar',
+  path: '/candidatar',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -73,6 +80,12 @@ const AuthenticatedAdminEleicoesRoute =
     path: '/eleicoes',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminConfiguracoesRoute =
+  AuthenticatedAdminConfiguracoesRouteImport.update({
+    id: '/configuracoes',
+    path: '/configuracoes',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminAtasRoute = AuthenticatedAdminAtasRouteImport.update({
   id: '/atas',
   path: '/atas',
@@ -88,11 +101,13 @@ const AuthenticatedAdminEleicoesIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/candidatar': typeof CandidatarRoute
   '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/votar/cedula': typeof VotarCedulaRoute
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar/': typeof VotarIndexRoute
   '/admin/atas': typeof AuthenticatedAdminAtasRoute
+  '/admin/configuracoes': typeof AuthenticatedAdminConfiguracoesRoute
   '/admin/eleicoes': typeof AuthenticatedAdminEleicoesRouteWithChildren
   '/admin/empregados': typeof AuthenticatedAdminEmpregadosRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
@@ -101,10 +116,12 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/candidatar': typeof CandidatarRoute
   '/votar/cedula': typeof VotarCedulaRoute
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar': typeof VotarIndexRoute
   '/admin/atas': typeof AuthenticatedAdminAtasRoute
+  '/admin/configuracoes': typeof AuthenticatedAdminConfiguracoesRoute
   '/admin/eleicoes': typeof AuthenticatedAdminEleicoesRouteWithChildren
   '/admin/empregados': typeof AuthenticatedAdminEmpregadosRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
@@ -115,11 +132,13 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/candidatar': typeof CandidatarRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
   '/votar/cedula': typeof VotarCedulaRoute
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar/': typeof VotarIndexRoute
   '/_authenticated/admin/atas': typeof AuthenticatedAdminAtasRoute
+  '/_authenticated/admin/configuracoes': typeof AuthenticatedAdminConfiguracoesRoute
   '/_authenticated/admin/eleicoes': typeof AuthenticatedAdminEleicoesRouteWithChildren
   '/_authenticated/admin/empregados': typeof AuthenticatedAdminEmpregadosRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
@@ -130,11 +149,13 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/candidatar'
     | '/admin'
     | '/votar/cedula'
     | '/votar/confirmado'
     | '/votar/'
     | '/admin/atas'
+    | '/admin/configuracoes'
     | '/admin/eleicoes'
     | '/admin/empregados'
     | '/admin/'
@@ -143,10 +164,12 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/candidatar'
     | '/votar/cedula'
     | '/votar/confirmado'
     | '/votar'
     | '/admin/atas'
+    | '/admin/configuracoes'
     | '/admin/eleicoes'
     | '/admin/empregados'
     | '/admin'
@@ -156,11 +179,13 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/candidatar'
     | '/_authenticated/admin'
     | '/votar/cedula'
     | '/votar/confirmado'
     | '/votar/'
     | '/_authenticated/admin/atas'
+    | '/_authenticated/admin/configuracoes'
     | '/_authenticated/admin/eleicoes'
     | '/_authenticated/admin/empregados'
     | '/_authenticated/admin/'
@@ -171,6 +196,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  CandidatarRoute: typeof CandidatarRoute
   VotarCedulaRoute: typeof VotarCedulaRoute
   VotarConfirmadoRoute: typeof VotarConfirmadoRoute
   VotarIndexRoute: typeof VotarIndexRoute
@@ -178,6 +204,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/candidatar': {
+      id: '/candidatar'
+      path: '/candidatar'
+      fullPath: '/candidatar'
+      preLoaderRoute: typeof CandidatarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -248,6 +281,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminEleicoesRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/configuracoes': {
+      id: '/_authenticated/admin/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/admin/configuracoes'
+      preLoaderRoute: typeof AuthenticatedAdminConfiguracoesRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/admin/atas': {
       id: '/_authenticated/admin/atas'
       path: '/atas'
@@ -281,6 +321,7 @@ const AuthenticatedAdminEleicoesRouteWithChildren =
 
 interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminAtasRoute: typeof AuthenticatedAdminAtasRoute
+  AuthenticatedAdminConfiguracoesRoute: typeof AuthenticatedAdminConfiguracoesRoute
   AuthenticatedAdminEleicoesRoute: typeof AuthenticatedAdminEleicoesRouteWithChildren
   AuthenticatedAdminEmpregadosRoute: typeof AuthenticatedAdminEmpregadosRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
@@ -288,6 +329,7 @@ interface AuthenticatedAdminRouteChildren {
 
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminAtasRoute: AuthenticatedAdminAtasRoute,
+  AuthenticatedAdminConfiguracoesRoute: AuthenticatedAdminConfiguracoesRoute,
   AuthenticatedAdminEleicoesRoute: AuthenticatedAdminEleicoesRouteWithChildren,
   AuthenticatedAdminEmpregadosRoute: AuthenticatedAdminEmpregadosRoute,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
@@ -311,6 +353,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  CandidatarRoute: CandidatarRoute,
   VotarCedulaRoute: VotarCedulaRoute,
   VotarConfirmadoRoute: VotarConfirmadoRoute,
   VotarIndexRoute: VotarIndexRoute,
@@ -318,13 +361,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

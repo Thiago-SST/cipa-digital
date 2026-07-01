@@ -19,6 +19,7 @@ function Cedula() {
   const logout = useServerFn(voterLogout);
 
   const [selected, setSelected] = useState<string | null>(null);
+  const [voteMode, setVoteMode] = useState<"nominal" | "branco" | "nulo">("nominal");
   const [confirming, setConfirming] = useState(false);
 
   const q = useQuery({
@@ -28,7 +29,8 @@ function Cedula() {
   });
 
   const mutation = useMutation({
-    mutationFn: (candidateId: string) => vote({ data: { candidateId } }),
+    mutationFn: (input: { candidateId: string | null; tipo: "nominal" | "branco" | "nulo" }) =>
+      vote({ data: input }),
     onSuccess: () => navigate({ to: "/votar/confirmado" }),
   });
 
@@ -77,6 +79,19 @@ function Cedula() {
 
   const candidate = data.candidates.find((c) => c.id === selected) ?? null;
 
+  function handleConfirm() {
+    setConfirming(true);
+  }
+
+  function submitVote() {
+    if (voteMode === "nominal") {
+      if (!selected) return;
+      mutation.mutate({ candidateId: selected, tipo: "nominal" });
+    } else {
+      mutation.mutate({ candidateId: null, tipo: voteMode });
+    }
+  }
+
   return (
     <VoterShell>
       <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3 text-sm">
@@ -108,11 +123,14 @@ function Cedula() {
 
       <ul className="mt-6 grid gap-3">
         {data.candidates.map((c) => {
-          const active = selected === c.id;
+          const active = voteMode === "nominal" && selected === c.id;
           return (
             <li key={c.id}>
               <button
-                onClick={() => setSelected(c.id)}
+                onClick={() => {
+                  setVoteMode("nominal");
+                  setSelected(c.id);
+                }}
                 className={`flex w-full items-start gap-4 rounded-lg border bg-card p-4 text-left transition ${
                   active
                     ? "border-primary ring-2 ring-primary/30"
@@ -138,19 +156,56 @@ function Cedula() {
             </li>
           );
         })}
+        <li className="grid gap-3 sm:grid-cols-2">
+          <button
+            onClick={() => {
+              setVoteMode("branco");
+              setSelected(null);
+            }}
+            className={`rounded-lg border bg-card p-4 text-left transition ${
+              voteMode === "branco"
+                ? "border-primary ring-2 ring-primary/30"
+                : "border-dashed border-border hover:border-primary/40"
+            }`}
+          >
+            <div className="text-sm font-semibold text-foreground">Votar em branco</div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Registra participação sem escolher candidato.
+            </p>
+          </button>
+          <button
+            onClick={() => {
+              setVoteMode("nulo");
+              setSelected(null);
+            }}
+            className={`rounded-lg border bg-card p-4 text-left transition ${
+              voteMode === "nulo"
+                ? "border-primary ring-2 ring-primary/30"
+                : "border-dashed border-border hover:border-primary/40"
+            }`}
+          >
+            <div className="text-sm font-semibold text-foreground">Anular voto</div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Não computa para nenhum candidato.
+            </p>
+          </button>
+        </li>
       </ul>
 
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <button
-          disabled={!selected}
-          onClick={() => setConfirming(true)}
+          disabled={voteMode === "nominal" && !selected}
+          onClick={handleConfirm}
           className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
         >
           Confirmar voto
         </button>
-        {selected && (
+        {(selected || voteMode !== "nominal") && (
           <button
-            onClick={() => setSelected(null)}
+            onClick={() => {
+              setSelected(null);
+              setVoteMode("nominal");
+            }}
             className="text-sm text-muted-foreground hover:text-foreground"
           >
             Limpar seleção
@@ -165,7 +220,7 @@ function Cedula() {
         </div>
       )}
 
-      {confirming && candidate && (
+      {confirming && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/40 p-4">
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-xl">
             <h2 className="text-lg font-semibold text-foreground">Confirmar seu voto</h2>
@@ -174,14 +229,23 @@ function Cedula() {
             </p>
             <div className="mt-4 rounded-md border border-border bg-secondary/40 p-4">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                Candidato selecionado
+                {voteMode === "nominal" ? "Candidato selecionado" : "Tipo de voto"}
               </div>
-              <div className="mt-1 text-base font-semibold text-foreground">
-                {candidate.numero ? `${candidate.numero} · ` : ""}{candidate.nome}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {candidate.setor} {candidate.cargo ? `· ${candidate.cargo}` : ""}
-              </div>
+              {voteMode === "nominal" && candidate ? (
+                <>
+                  <div className="mt-1 text-base font-semibold text-foreground">
+                    {candidate.numero ? `${candidate.numero} · ` : ""}
+                    {candidate.nome}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {candidate.setor} {candidate.cargo ? `· ${candidate.cargo}` : ""}
+                  </div>
+                </>
+              ) : (
+                <div className="mt-1 text-base font-semibold text-foreground">
+                  {voteMode === "branco" ? "Voto em branco" : "Voto nulo"}
+                </div>
+              )}
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -192,7 +256,7 @@ function Cedula() {
                 Voltar
               </button>
               <button
-                onClick={() => mutation.mutate(candidate.id)}
+                onClick={submitVote}
                 disabled={mutation.isPending}
                 className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
               >
