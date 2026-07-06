@@ -41,6 +41,60 @@ export type Database = {
         }
         Relationships: []
       }
+      candidate_challenges: {
+        Row: {
+          autor_matricula: string
+          autor_nome: string
+          candidate_id: string
+          created_at: string
+          decidido_em: string | null
+          decisao: string
+          election_id: string
+          id: string
+          justificativa: string | null
+          motivo: string
+        }
+        Insert: {
+          autor_matricula: string
+          autor_nome: string
+          candidate_id: string
+          created_at?: string
+          decidido_em?: string | null
+          decisao?: string
+          election_id: string
+          id?: string
+          justificativa?: string | null
+          motivo: string
+        }
+        Update: {
+          autor_matricula?: string
+          autor_nome?: string
+          candidate_id?: string
+          created_at?: string
+          decidido_em?: string | null
+          decisao?: string
+          election_id?: string
+          id?: string
+          justificativa?: string | null
+          motivo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidate_challenges_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidate_challenges_election_id_fkey"
+            columns: ["election_id"]
+            isOneToOne: false
+            referencedRelation: "elections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       candidates: {
         Row: {
           cargo: string | null
@@ -104,6 +158,41 @@ export type Database = {
           },
         ]
       }
+      election_commission_members: {
+        Row: {
+          created_at: string
+          election_id: string
+          id: string
+          matricula: string | null
+          nome: string
+          papel: string
+        }
+        Insert: {
+          created_at?: string
+          election_id: string
+          id?: string
+          matricula?: string | null
+          nome: string
+          papel: string
+        }
+        Update: {
+          created_at?: string
+          election_id?: string
+          id?: string
+          matricula?: string | null
+          nome?: string
+          papel?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "election_commission_members_election_id_fkey"
+            columns: ["election_id"]
+            isOneToOne: false
+            referencedRelation: "elections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       election_documents: {
         Row: {
           conteudo: Json | null
@@ -148,15 +237,60 @@ export type Database = {
           },
         ]
       }
+      election_notices: {
+        Row: {
+          corpo: string
+          created_at: string
+          election_id: string
+          id: string
+          publicado_em: string
+          tipo: string
+          titulo: string
+        }
+        Insert: {
+          corpo: string
+          created_at?: string
+          election_id: string
+          id?: string
+          publicado_em?: string
+          tipo: string
+          titulo: string
+        }
+        Update: {
+          corpo?: string
+          created_at?: string
+          election_id?: string
+          id?: string
+          publicado_em?: string
+          tipo?: string
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "election_notices_election_id_fkey"
+            columns: ["election_id"]
+            isOneToOne: false
+            referencedRelation: "elections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       elections: {
         Row: {
+          arquivada: boolean
           created_at: string
           data_fim_inscricao: string | null
           data_fim_votacao: string | null
+          data_homologacao_inscricoes: string | null
+          data_homologacao_resultado: string | null
           data_inicio_inscricao: string | null
           data_inicio_votacao: string | null
+          data_posse: string | null
+          data_publicacao_edital: string | null
           descricao: string | null
           id: string
+          mandato_fim: string | null
+          mandato_inicio: string | null
           nome: string
           status: Database["public"]["Enums"]["election_status"]
           updated_at: string
@@ -164,13 +298,20 @@ export type Database = {
           vagas_titulares: number
         }
         Insert: {
+          arquivada?: boolean
           created_at?: string
           data_fim_inscricao?: string | null
           data_fim_votacao?: string | null
+          data_homologacao_inscricoes?: string | null
+          data_homologacao_resultado?: string | null
           data_inicio_inscricao?: string | null
           data_inicio_votacao?: string | null
+          data_posse?: string | null
+          data_publicacao_edital?: string | null
           descricao?: string | null
           id?: string
+          mandato_fim?: string | null
+          mandato_inicio?: string | null
           nome: string
           status?: Database["public"]["Enums"]["election_status"]
           updated_at?: string
@@ -178,13 +319,20 @@ export type Database = {
           vagas_titulares?: number
         }
         Update: {
+          arquivada?: boolean
           created_at?: string
           data_fim_inscricao?: string | null
           data_fim_votacao?: string | null
+          data_homologacao_inscricoes?: string | null
+          data_homologacao_resultado?: string | null
           data_inicio_inscricao?: string | null
           data_inicio_votacao?: string | null
+          data_posse?: string | null
+          data_publicacao_edital?: string | null
           descricao?: string | null
           id?: string
+          mandato_fim?: string | null
+          mandato_inicio?: string | null
           nome?: string
           status?: Database["public"]["Enums"]["election_status"]
           updated_at?: string
@@ -384,7 +532,16 @@ export type Database = {
       app_role: "admin" | "organizador"
       candidate_origem: "admin" | "auto"
       candidate_status: "pending" | "approved" | "rejected"
-      election_status: "draft" | "registration" | "voting" | "closed"
+      election_status:
+        | "draft"
+        | "published"
+        | "registration"
+        | "homologation"
+        | "voting"
+        | "counting"
+        | "result_homologation"
+        | "concluded"
+        | "closed"
       vote_type: "nominal" | "branco" | "nulo"
     }
     CompositeTypes: {
@@ -516,7 +673,17 @@ export const Constants = {
       app_role: ["admin", "organizador"],
       candidate_origem: ["admin", "auto"],
       candidate_status: ["pending", "approved", "rejected"],
-      election_status: ["draft", "registration", "voting", "closed"],
+      election_status: [
+        "draft",
+        "published",
+        "registration",
+        "homologation",
+        "voting",
+        "counting",
+        "result_homologation",
+        "concluded",
+        "closed",
+      ],
       vote_type: ["nominal", "branco", "nulo"],
     },
   },

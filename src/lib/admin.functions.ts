@@ -133,14 +133,23 @@ export const setElectionStatus = createServerFn({ method: "POST" })
       z
         .object({
           id: z.string().uuid(),
-          status: z.enum(["draft", "registration", "voting", "closed"]),
+          status: z.enum([
+            "draft",
+            "published",
+            "registration",
+            "homologation",
+            "voting",
+            "counting",
+            "result_homologation",
+            "concluded",
+            "closed",
+          ]),
         })
         .parse(d),
   )
   .handler(async ({ context, data }) => {
     const sb = await ensureAdmin(context.userId);
     if (data.status === "voting") {
-      // Encerra outras em votação
       await sb.from("elections").update({ status: "closed" }).eq("status", "voting").neq("id", data.id);
     }
     const { error } = await sb.from("elections").update({ status: data.status }).eq("id", data.id);
@@ -608,4 +617,246 @@ export const listAuditEvents = createServerFn({ method: "GET" })
       .order("created_at", { ascending: false })
       .limit(200);
     return data ?? [];
+  });
+
+/* ============ MARCOS TEMPORAIS (mandato / posse / edital) ============ */
+export const updateElectionMilestones = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        mandato_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+        mandato_fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+        data_posse: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { id, ...rest } = data;
+    const { error } = await sb.from("elections").update(rest).eq("id", id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/* ============ COMISSÃO ELEITORAL ============ */
+const commissionSchema = z.object({
+  id: z.string().uuid().optional(),
+  election_id: z.string().uuid(),
+  nome: z.string().trim().min(2).max(120),
+  matricula: z.string().trim().max(30).optional().nullable(),
+  papel: z.enum(["presidente", "secretario", "membro"]),
+});
+
+export const listCommission = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ electionId: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { data: rows } = await sb
+      .from("election_commission_members")
+      .select("*")
+      .eq("election_id", data.electionId)
+      .order("papel");
+    return rows ?? [];
+  });
+
+export const upsertCommissionMember = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => commissionSchema.parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    if (data.id) {
+      const { error } = await sb.from("election_commission_members").update(data).eq("id", data.id);
+      if (error) throw new Error(error.message);
+      return { id: data.id };
+    }
+    const { data: c, error } = await sb
+      .from("election_commission_members")
+      .insert(data)
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+    return { id: c.id };
+  });
+
+export const deleteCommissionMember = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { error } = await sb.from("election_commission_members").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/* ============ IMPUGNAÇÕES ============ */
+export const listChallenges = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ electionId: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { data: rows } = await sb
+      .from("candidate_challenges")
+      .select("*, candidates(nome, matricula, numero)")
+      .eq("election_id", data.electionId)
+      .order("created_at", { ascending: false });
+    return rows ?? [];
+  });
+
+export const judgeChallenge = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        decisao: z.enum(["deferido", "indeferido"]),
+        justificativa: z.string().trim().max(1000).optional().nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { data: ch } = await sb
+      .from("candidate_challenges")
+      .select("candidate_id")
+      .eq("id", data.id)
+      .maybeSingle();
+    const { error } = await sb
+      .from("candidate_challenges")
+      .update({
+        decisao: data.decisao,
+        justificativa: data.justificativa ?? null,
+        decidido_em: new Date().toISOString(),
+      })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    // Se deferida (candidatura invalidada), rejeita o candidato
+    if (data.decisao === "deferido" && ch?.candidate_id) {
+      await sb.from("candidates").update({ status: "rejected" }).eq("id", ch.candidate_id);
+    }
+    await sb.from("access_logs").insert({
+      ator: context.userId,
+      acao: `challenge.${data.decisao}`,
+      detalhes: { challengeId: data.id },
+    });
+    return { ok: true };
+  });
+
+/* ============ AVISOS OFICIAIS ============ */
+const noticeSchema = z.object({
+  id: z.string().uuid().optional(),
+  election_id: z.string().uuid(),
+  tipo: z.enum([
+    "edital",
+    "homologacao_inscricoes",
+    "abertura_votacao",
+    "encerramento_votacao",
+    "resultado",
+    "homologacao_resultado",
+    "posse",
+    "geral",
+  ]),
+  titulo: z.string().trim().min(3).max(200),
+  corpo: z.string().trim().min(3).max(4000),
+});
+
+export const listNotices = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ electionId: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { data: rows } = await sb
+      .from("election_notices")
+      .select("*")
+      .eq("election_id", data.electionId)
+      .order("publicado_em", { ascending: false });
+    return rows ?? [];
+  });
+
+export const publishNotice = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => noticeSchema.parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    if (data.id) {
+      const { error } = await sb.from("election_notices").update(data).eq("id", data.id);
+      if (error) throw new Error(error.message);
+      return { id: data.id };
+    }
+    const { data: n, error } = await sb.from("election_notices").insert(data).select("id").single();
+    if (error) throw new Error(error.message);
+    await sb.from("access_logs").insert({
+      ator: context.userId,
+      acao: `notice.${data.tipo}`,
+      detalhes: { electionId: data.election_id, titulo: data.titulo },
+    });
+    return { id: n.id };
+  });
+
+export const deleteNotice = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { error } = await sb.from("election_notices").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/* ============ HOMOLOGAÇÕES E ARQUIVAMENTO ============ */
+export const homologateRegistrations = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { error } = await sb
+      .from("elections")
+      .update({ data_homologacao_inscricoes: new Date().toISOString(), status: "homologation" })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await sb.from("access_logs").insert({
+      ator: context.userId,
+      acao: "election.homologate_registrations",
+      detalhes: { electionId: data.id },
+    });
+    return { ok: true };
+  });
+
+export const homologateResult = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { error } = await sb
+      .from("elections")
+      .update({ data_homologacao_resultado: new Date().toISOString(), status: "result_homologation" })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await sb.from("access_logs").insert({
+      ator: context.userId,
+      acao: "election.homologate_result",
+      detalhes: { electionId: data.id },
+    });
+    return { ok: true };
+  });
+
+export const archiveElection = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ id: z.string().uuid(), arquivada: z.boolean() }).parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const patch: { arquivada: boolean; status?: "concluded" } = { arquivada: data.arquivada };
+    if (data.arquivada) patch.status = "concluded";
+    const { error } = await sb.from("elections").update(patch).eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await sb.from("access_logs").insert({
+      ator: context.userId,
+      acao: data.arquivada ? "election.archive" : "election.unarchive",
+      detalhes: { electionId: data.id },
+    });
+    return { ok: true };
   });

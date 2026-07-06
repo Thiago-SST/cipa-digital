@@ -1,73 +1,81 @@
-## O que já está pronto
+# Estruturação completa do processo de eleição (NR-5)
 
-**Fluxo do eleitor (Fase 1)**
-- Login por matrícula/CPF + data de nascimento
-- Cédula com candidatos, confirmação e tela de voto registrado
-- Voto anônimo, único por eleitor, com token e log de acesso
+Revisão do que existe versus o que a NR-5 exige, e implementação das peças faltantes para fechar o ciclo eleitoral de ponta a ponta.
 
-**Painel administrativo (Fase 2)**
-- Auth de admin (email/senha) + bootstrap do primeiro admin + `user_roles` com RLS
-- CRUD de eleições (status draft → registration → voting → closed)
-- CRUD de candidatos (aprovação, número de cédula)
-- CRUD de empregados + importação CSV
-- Configuração de vagas titulares/suplentes por eleição
-- Apuração com ranking, desempate NR-5, separação titular/suplente, banner de vagas em aberto
-- Atas de apuração (geração, impressão, arquivamento) e listagem em `/admin/atas`
-- Dashboard com métricas de comparecimento
+## Estado atual (já pronto)
 
----
+- Eleições com status `draft → registration → voting → closed`
+- Cadastro/aprovação de candidatos, importação de eleitores, vagas titulares/suplentes
+- Votação anônima, cédula, voto branco/nulo, janela de votação
+- Apuração com ranking, desempate NR-5, ata de apuração
+- Documentos anexos, exportações CSV, auditoria, configurações da organização
+- Auth de admin, recuperação de senha, roles
 
-## O que ainda falta do escopo original
+## Peças NR-5 faltantes
 
-### 1. Inscrição de candidatos pelo próprio empregado
-Hoje só o admin cadastra candidatos. A NR-5 pressupõe inscrição voluntária durante o período de inscrição.
-- Tela pública `/candidatar` (login de empregado + formulário: cargo, setor, proposta, foto opcional)
-- Regras: só permitido quando a eleição está em `registration`, um empregado = uma candidatura, status inicial `pendente` para aprovação do admin
-- Aviso na home para empregados durante o período de inscrição
+O ciclo real da CIPA tem etapas formais que hoje não estão modeladas:
 
-### 2. Comunicação / notificações
-Original pedia avisos aos eleitores.
-- Envio de email em massa (abertura das inscrições, abertura da votação, encerramento) via Lovable Cloud + template
-- Banner de "eleição aberta" na tela inicial do eleitor
-- Opcional: reenvio de convite individual pelo admin
+```text
+Constituição da Comissão Eleitoral
+        ↓
+Publicação do Edital (mín. 60 dias antes do fim do mandato)
+        ↓
+Inscrições (mín. 15 dias)
+        ↓
+Homologação das inscrições  ← período de impugnação
+        ↓
+Votação (mín. 30 dias antes do fim do mandato)
+        ↓
+Apuração  ← lavratura de ata
+        ↓
+Homologação do resultado  ← período de recurso
+        ↓
+Posse dos eleitos (1 dia após o fim do mandato anterior)
+        ↓
+Arquivamento por 5 anos
+```
 
-### 3. Auditoria e transparência
-- Página `/admin/auditoria`: timeline de eventos (criação de eleição, aprovação de candidato, abertura/fechamento da votação, importação de eleitores, geração de ata) — já existe `access_logs`, falta uma tela e ampliar os eventos gravados
-- Exportações: lista de votantes (quem votou, sem revelar em quem), lista de candidatos, resultado final em CSV
-- Hash/assinatura da ata para prova de integridade
+## O que vou implementar
 
-### 4. Documentos comprobatórios além da ata de apuração
-Hoje só existe ata de apuração.
-- Edital de convocação
-- Ata de abertura da votação
-- Ata de encerramento
-- Upload manual de PDFs assinados (Storage bucket `election_documents`) vinculado à eleição
+### 1. Comissão Eleitoral
+Tabela `election_commission_members` (presidente, secretário, membros) vinculada à eleição, com nome, matrícula, papel e assinatura registrada em ata. Aba "Comissão" na tela da eleição.
 
-### 5. Ajustes no fluxo do eleitor
-- Home `/votar` mostrar qual eleição está aberta (hoje o eleitor loga "no escuro")
-- Bloquear login fora da janela `data_inicio_votacao` / `data_fim_votacao`
-- Suporte a voto em branco / nulo (a NR-5 permite; hoje só há voto nominal)
-- Opcional: múltiplos votos por eleitor quando houver mais de uma vaga (a norma clássica é 1 voto por eleitor, então confirmar antes)
+### 2. Cronograma oficial e novos status
+Ampliar o enum de status para refletir a NR-5:
+`draft → published → registration → homologation → voting → counting → result_homologation → concluded`
+Com datas obrigatórias por fase e validação de prazos mínimos (15 dias inscrição, 30 dias antes do fim do mandato para votação). Timeline visual na tela da eleição.
 
-### 6. Configurações globais
-Original pedia "configurações da organização".
-- Página `/admin/configuracoes`: nome da organização, CNPJ, logo, mandato (data início/fim), texto padrão do edital, vagas padrão sugeridas
-- Usadas nos cabeçalhos das atas e no rodapé do sistema
+### 3. Edital de convocação
+Gerador automático de edital em PDF a partir das configurações da organização + dados da eleição (mandato, prazos, número de vagas, comissão). Botão "Publicar edital" que muda status para `published` e registra data de publicação.
 
-### 7. Polimentos
-- Recuperação de senha do admin
-- Segundo perfil "organizador" (enum já existe) com permissões reduzidas (ver, não editar apuração)
-- Testes básicos do fluxo de voto
-- SEO/metadata das páginas públicas revisada
+### 4. Impugnação de candidaturas
+Após o fim das inscrições, período de impugnação: qualquer eleitor logado pode contestar uma candidatura (motivo textual). Tela admin para julgar (deferir/indeferir) antes de mudar para `voting`. Tabela `candidate_challenges`.
 
----
+### 5. Homologação do resultado e recurso
+Após apuração, período configurável para recurso. Admin marca "Resultado homologado" que congela ranking e libera geração da ata final e termo de posse.
 
-## Sugestão de próxima fase
+### 6. Termo de posse
+Gerador de termo de posse listando titulares e suplentes eleitos, com espaço para assinatura, data de posse e início do mandato. PDF anexado automaticamente aos documentos da eleição.
 
-Recomendo agrupar assim, em ordem de valor:
+### 7. Ata de abertura e encerramento da votação
+Geração automática ao mudar status `registration → voting` (abertura) e `voting → counting` (encerramento), com totalizadores parciais e registro dos mesários.
 
-- **Fase 3** — Inscrição de candidatos pelo empregado + home do eleitor mostrando eleição ativa + janela de votação + voto branco/nulo
-- **Fase 4** — Documentos comprobatórios (upload) + edital + ata de abertura/encerramento + exportações CSV + tela de auditoria
-- **Fase 5** — Notificações por email + configurações da organização + perfil organizador + recuperação de senha
+### 8. Notificações internas ao eleitor
+Ao logar em `/votar`, o eleitor vê um feed com os avisos oficiais da eleição (edital publicado, homologação, resultado). Sem depender de email externo nesta fase.
 
-Me diga qual fase seguir (ou reordene os itens) e eu já começo.
+### 9. Arquivamento
+Marcador "arquivado" e exportação consolidada (ZIP com todos documentos + CSVs) preservando por 5 anos conforme NR-5.
+
+## Detalhes técnicos
+
+- Migração: novo enum `election_status`, tabelas `election_commission_members`, `candidate_challenges`, campos `data_publicacao_edital`, `data_homologacao_inscricoes`, `data_homologacao_resultado`, `data_posse` em `elections`
+- Server functions em `src/lib/admin.functions.ts` para cada nova operação (createCommission, publishEdital, challengeCandidate, judgeChallenge, homologateResult, issueTermoPosse, generateArchiveBundle)
+- Server function pública `challengeCandidate` em `voter.functions.ts` (usa sessão de eleitor existente)
+- UI: nova aba "Processo" na tela `/admin/eleicoes/$id` com timeline clicável guiando o admin fase a fase; abas existentes (Candidatos, Documentos, Apuração) permanecem
+- Geração de PDF: usar `jspdf` (já instalado) para edital, termo de posse, atas de abertura/encerramento
+- RLS: mantém padrão atual (admin CRUD, eleitor leitura restrita)
+
+## Fora do escopo desta fase
+- Envio de email em massa (fica para uma fase de comunicação externa)
+- Assinatura digital ICP-Brasil (usamos assinatura manual + upload de PDF assinado como já existe)
+- App mobile
