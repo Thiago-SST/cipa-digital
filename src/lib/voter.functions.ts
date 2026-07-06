@@ -315,3 +315,63 @@ export const getMyCandidacy = createServerFn({ method: "GET" }).handler(async ()
     inWindow: isWithinWindow(election.data_inicio_inscricao, election.data_fim_inscricao),
   };
 });
+
+/* ============ AVISOS / IMPUGNAÇÕES PÚBLICAS ============ */
+export const listPublicNotices = createServerFn({ method: "GET" }).handler(async () => {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data: election } = await supabaseAdmin
+    .from("elections")
+    .select("id, nome")
+    .not("status", "in", "(draft)")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!election) return { election: null, notices: [] as Array<{ id: string; tipo: string; titulo: string; corpo: string; publicado_em: string }> };
+  const { data: notices } = await supabaseAdmin
+    .from("election_notices")
+    .select("id, tipo, titulo, corpo, publicado_em")
+    .eq("election_id", election.id)
+    .order("publicado_em", { ascending: false })
+    .limit(20);
+  return { election, notices: notices ?? [] };
+});
+
+const challengeSchema = z.object({
+  candidateId: z.string().uuid(),
+  motivo: z.string().trim().min(10).max(1000),
+});
+
+export const submitChallenge = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => challengeSchema.parse(d))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { getVoterSession } = await import("./voter-session.server");
+    const session = await getVoterSession();
+    if (!session.data.employeeId) throw new Error("Faça login para impugnar uma candidatura.");
+
+    const { data: cand } = await supabaseAdmin
+      .from("candidates")
+      .select("id, election_id")
+      .eq("id", data.candidateId)
+      .maybeSingle();
+    if (!cand) throw new Error("Candidatura inválida.");
+
+    const { data: el } = await supabaseAdmin
+      .from("elections")
+      .select("status")
+      .eq("id", cand.election_id)
+      .maybeSingle();
+    if (!el || !["registration", "homologation"].includes(el.status)) {
+      throw new Error("Fora do período de impugnação.");
+    }
+
+    const { error } = await supabaseAdmin.from("candidate_challenges").insert({
+      election_id: cand.election_id,
+      candidate_id: cand.id,
+      autor_matricula: session.data.matricula!,
+      autor_nome: session.data.nome!,
+      motivo: data.motivo,
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
