@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { LogIn, AlertCircle, Vote, ClipboardEdit, CalendarClock } from "lucide-react";
 
-import { voterLogin, getActiveElectionInfo } from "@/lib/voter.functions";
+import { voterLogin, getActiveElectionInfo, listPublicNotices } from "@/lib/voter.functions";
 import { VoterShell } from "@/components/voter-shell";
 
 export const Route = createFileRoute("/votar/")({
@@ -22,6 +22,8 @@ function VotarLogin() {
   const login = useServerFn(voterLogin);
   const infoFn = useServerFn(getActiveElectionInfo);
   const info = useQuery({ queryKey: ["voter-info"], queryFn: () => infoFn() });
+  const noticesFn = useServerFn(listPublicNotices);
+  const notices = useQuery({ queryKey: ["voter-notices"], queryFn: () => noticesFn() });
   const [identificador, setIdentificador] = useState("");
   const [data, setData] = useState("");
 
@@ -137,6 +139,23 @@ function VotarLogin() {
             <ClipboardEdit className="h-4 w-4" />
             Quero me candidatar
           </a>
+        )}
+
+        {notices.data && notices.data.notices.length > 0 && (
+          <section className="mt-6 rounded-lg border border-border bg-card p-4">
+            <h2 className="text-sm font-semibold">Avisos oficiais</h2>
+            <ul className="mt-2 space-y-3">
+              {notices.data.notices.map((n) => (
+                <li key={n.id} className="border-l-2 border-primary/40 pl-3">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {n.tipo} · {new Date(n.publicado_em).toLocaleString("pt-BR")}
+                  </div>
+                  <div className="text-sm font-medium">{n.titulo}</div>
+                  <p className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground">{n.corpo}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
       </div>
     </VoterShell>
