@@ -133,14 +133,23 @@ export const setElectionStatus = createServerFn({ method: "POST" })
       z
         .object({
           id: z.string().uuid(),
-          status: z.enum(["draft", "registration", "voting", "closed"]),
+          status: z.enum([
+            "draft",
+            "published",
+            "registration",
+            "homologation",
+            "voting",
+            "counting",
+            "result_homologation",
+            "concluded",
+            "closed",
+          ]),
         })
         .parse(d),
   )
   .handler(async ({ context, data }) => {
     const sb = await ensureAdmin(context.userId);
     if (data.status === "voting") {
-      // Encerra outras em votação
       await sb.from("elections").update({ status: "closed" }).eq("status", "voting").neq("id", data.id);
     }
     const { error } = await sb.from("elections").update({ status: data.status }).eq("id", data.id);
