@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, Play, Square, Plus, Trash2, Printer, Award, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Play, Square, Plus, Trash2, Printer, Award, AlertTriangle, CheckCircle2, Users, Gavel, Megaphone, ListChecks, Archive } from "lucide-react";
 
 import {
   getElection,
@@ -18,28 +18,54 @@ import {
   getDocumentSignedUrl,
   deleteElectionDocument,
   exportElectionData,
+  listCommission,
+  upsertCommissionMember,
+  deleteCommissionMember,
+  listChallenges,
+  judgeChallenge,
+  listNotices,
+  publishNotice,
+  deleteNotice,
+  homologateRegistrations,
+  homologateResult,
+  archiveElection,
+  updateElectionMilestones,
 } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/eleicoes/$id")({
   component: ElectionDetail,
 });
 
-type Tab = "detalhes" | "candidatos" | "apuracao" | "ata" | "documentos";
+type Tab =
+  | "processo"
+  | "detalhes"
+  | "comissao"
+  | "candidatos"
+  | "impugnacoes"
+  | "avisos"
+  | "apuracao"
+  | "ata"
+  | "documentos";
+
+type ElectionStatus =
+  | "draft"
+  | "published"
+  | "registration"
+  | "homologation"
+  | "voting"
+  | "counting"
+  | "result_homologation"
+  | "concluded"
+  | "closed";
 
 function ElectionDetail() {
   const { id } = Route.useParams();
-  const [tab, setTab] = useState<Tab>("detalhes");
+  const [tab, setTab] = useState<Tab>("processo");
 
   const fnGet = useServerFn(getElection);
-  const fnStatus = useServerFn(setElectionStatus);
   const qc = useQueryClient();
 
   const q = useQuery({ queryKey: ["admin-election", id], queryFn: () => fnGet({ data: { id } }) });
-  const mStatus = useMutation({
-    mutationFn: (status: "draft" | "registration" | "voting" | "closed") =>
-      fnStatus({ data: { id, status } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-election", id] }),
-  });
 
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
   const el = q.data!;
@@ -55,39 +81,31 @@ function ElectionDetail() {
           <h1 className="text-2xl font-semibold tracking-tight">{el.nome}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {el.vagas_titulares} titulares · {el.vagas_suplentes} suplentes · status atual:{" "}
-            <strong>{el.status}</strong>
+            <strong>{statusLabel(el.status as ElectionStatus)}</strong>
+            {el.arquivada ? " · arquivada" : ""}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {el.status !== "voting" && (
-            <button
-              onClick={() => mStatus.mutate("voting")}
-              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-            >
-              <Play className="h-3.5 w-3.5" /> Abrir votação
-            </button>
-          )}
-          {el.status === "voting" && (
-            <button
-              onClick={() => mStatus.mutate("closed")}
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted"
-            >
-              <Square className="h-3.5 w-3.5" /> Encerrar votação
-            </button>
-          )}
-          {el.status === "draft" && (
-            <button
-              onClick={() => mStatus.mutate("registration")}
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted"
-            >
-              Abrir inscrições
-            </button>
-          )}
-        </div>
+        <QuickStatusActions
+          id={id}
+          status={el.status as ElectionStatus}
+          onChanged={() => qc.invalidateQueries({ queryKey: ["admin-election", id] })}
+        />
       </header>
 
       <nav className="flex flex-wrap gap-1 border-b border-border">
-        {(["detalhes", "candidatos", "apuracao", "ata", "documentos"] as Tab[]).map((t) => (
+        {(
+          [
+            "processo",
+            "detalhes",
+            "comissao",
+            "candidatos",
+            "impugnacoes",
+            "avisos",
+            "apuracao",
+            "ata",
+            "documentos",
+          ] as Tab[]
+        ).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -95,16 +113,545 @@ function ElectionDetail() {
               tab === t ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            {t === "apuracao" ? "Apuração" : t}
+            {tabLabel(t)}
           </button>
         ))}
       </nav>
 
+      {tab === "processo" && <ProcessoTab id={id} el={el} />}
       {tab === "detalhes" && <DetailsTab el={el} />}
+      {tab === "comissao" && <CommissionTab electionId={id} />}
       {tab === "candidatos" && <CandidatesTab electionId={id} />}
+      {tab === "impugnacoes" && <ChallengesTab electionId={id} />}
+      {tab === "avisos" && <NoticesTab electionId={id} />}
       {tab === "apuracao" && <ResultsTab electionId={id} />}
       {tab === "ata" && <AtaTab electionId={id} />}
       {tab === "documentos" && <DocumentsTab electionId={id} />}
+    </div>
+  );
+}
+
+function tabLabel(t: Tab): string {
+  const map: Record<Tab, string> = {
+    processo: "Processo",
+    detalhes: "Detalhes",
+    comissao: "Comissão",
+    candidatos: "Candidatos",
+    impugnacoes: "Impugnações",
+    avisos: "Avisos",
+    apuracao: "Apuração",
+    ata: "Ata",
+    documentos: "Documentos",
+  };
+  return map[t];
+}
+
+function statusLabel(s: ElectionStatus): string {
+  const map: Record<ElectionStatus, string> = {
+    draft: "Rascunho",
+    published: "Edital publicado",
+    registration: "Inscrições abertas",
+    homologation: "Homologação de inscrições",
+    voting: "Em votação",
+    counting: "Em apuração",
+    result_homologation: "Homologação do resultado",
+    concluded: "Concluída",
+    closed: "Encerrada",
+  };
+  return map[s] ?? s;
+}
+
+function QuickStatusActions({
+  id,
+  status,
+  onChanged,
+}: {
+  id: string;
+  status: ElectionStatus;
+  onChanged: () => void;
+}) {
+  const fnStatus = useServerFn(setElectionStatus);
+  const m = useMutation({
+    mutationFn: (s: ElectionStatus) => fnStatus({ data: { id, status: s } }),
+    onSuccess: onChanged,
+  });
+  const next = nextStatus(status);
+  if (!next) return null;
+  return (
+    <button
+      onClick={() => m.mutate(next.value)}
+      disabled={m.isPending}
+      className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+    >
+      <Play className="h-3.5 w-3.5" /> {next.label}
+    </button>
+  );
+}
+
+function nextStatus(s: ElectionStatus): { value: ElectionStatus; label: string } | null {
+  switch (s) {
+    case "draft":
+      return { value: "published", label: "Publicar edital" };
+    case "published":
+      return { value: "registration", label: "Abrir inscrições" };
+    case "registration":
+      return { value: "homologation", label: "Encerrar inscrições" };
+    case "homologation":
+      return { value: "voting", label: "Abrir votação" };
+    case "voting":
+      return { value: "counting", label: "Encerrar votação" };
+    case "counting":
+      return { value: "result_homologation", label: "Homologar resultado" };
+    case "result_homologation":
+      return { value: "concluded", label: "Concluir eleição" };
+    default:
+      return null;
+  }
+}
+
+/* ============ PROCESSO (timeline) ============ */
+const STEPS: Array<{ status: ElectionStatus; titulo: string; descricao: string }> = [
+  { status: "draft", titulo: "1. Constituição e planejamento", descricao: "Cadastre a comissão eleitoral e defina o cronograma na aba Detalhes." },
+  { status: "published", titulo: "2. Publicação do edital", descricao: "Publique o edital de convocação (mín. 45 dias antes do fim do mandato)." },
+  { status: "registration", titulo: "3. Inscrições dos candidatos", descricao: "Empregados se auto-inscrevem em /candidatar ou você adiciona pela aba Candidatos." },
+  { status: "homologation", titulo: "4. Homologação e impugnações", descricao: "Analise impugnações e aprove/rejeite candidaturas antes de abrir a votação." },
+  { status: "voting", titulo: "5. Votação", descricao: "Voto secreto durante o período configurado. Acompanhe o comparecimento." },
+  { status: "counting", titulo: "6. Apuração", descricao: "Contagem automática de votos e ranqueamento com desempate NR-5." },
+  { status: "result_homologation", titulo: "7. Homologação do resultado", descricao: "Congela o ranking, permite recursos e emissão da ata final." },
+  { status: "concluded", titulo: "8. Posse e arquivamento", descricao: "Emita o termo de posse e arquive o processo (guarda mínima de 5 anos)." },
+];
+
+function ProcessoTab({
+  id,
+  el,
+}: {
+  id: string;
+  el: {
+    id: string;
+    status: string;
+    data_publicacao_edital?: string | null;
+    data_homologacao_inscricoes?: string | null;
+    data_homologacao_resultado?: string | null;
+    mandato_inicio?: string | null;
+    mandato_fim?: string | null;
+    data_posse?: string | null;
+    arquivada?: boolean;
+  };
+}) {
+  const qc = useQueryClient();
+  const homReg = useServerFn(homologateRegistrations);
+  const homRes = useServerFn(homologateResult);
+  const arch = useServerFn(archiveElection);
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["admin-election", id] });
+
+  const currentIdx = STEPS.findIndex((s) => s.status === el.status);
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h2 className="text-sm font-semibold">Etapas do processo NR-5</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Avance status a status pelo botão do cabeçalho. Ações formais registram o marco temporal.
+        </p>
+        <ol className="mt-4 space-y-3">
+          {STEPS.map((step, i) => {
+            const done = i < currentIdx || (i === currentIdx && el.status === "concluded");
+            const current = i === currentIdx;
+            return (
+              <li
+                key={step.status}
+                className={`flex gap-3 rounded-md border p-3 ${
+                  current ? "border-primary bg-primary/5" : done ? "border-border bg-muted/30" : "border-dashed border-border"
+                }`}
+              >
+                <div
+                  className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold ${
+                    done ? "bg-primary text-primary-foreground" : current ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {done ? "✓" : i + 1}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold">{step.titulo}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{step.descricao}</div>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h2 className="text-sm font-semibold">Ações do processo</h2>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            onClick={async () => {
+              await homReg({ data: { id } });
+              invalidate();
+            }}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-muted"
+          >
+            <ListChecks className="mr-1 inline h-3.5 w-3.5" /> Homologar inscrições
+          </button>
+          <button
+            onClick={async () => {
+              await homRes({ data: { id } });
+              invalidate();
+            }}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-muted"
+          >
+            <Gavel className="mr-1 inline h-3.5 w-3.5" /> Homologar resultado
+          </button>
+          <button
+            onClick={async () => {
+              await arch({ data: { id, arquivada: !el.arquivada } });
+              invalidate();
+            }}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-muted"
+          >
+            <Archive className="mr-1 inline h-3.5 w-3.5" /> {el.arquivada ? "Reabrir arquivo" : "Arquivar processo"}
+          </button>
+        </div>
+      </section>
+
+      <MilestonesEditor id={id} el={el} />
+    </div>
+  );
+}
+
+function MilestonesEditor({
+  id,
+  el,
+}: {
+  id: string;
+  el: { mandato_inicio?: string | null; mandato_fim?: string | null; data_posse?: string | null };
+}) {
+  const qc = useQueryClient();
+  const fn = useServerFn(updateElectionMilestones);
+  const [mi, setMi] = useState(el.mandato_inicio ?? "");
+  const [mf, setMf] = useState(el.mandato_fim ?? "");
+  const [dp, setDp] = useState(el.data_posse ?? "");
+  const m = useMutation({
+    mutationFn: () =>
+      fn({
+        data: {
+          id,
+          mandato_inicio: mi || null,
+          mandato_fim: mf || null,
+          data_posse: dp || null,
+        },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-election", id] }),
+  });
+  return (
+    <section className="rounded-lg border border-border bg-card p-5">
+      <h2 className="text-sm font-semibold">Datas do mandato</h2>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <label className="text-xs font-medium">
+          Início do mandato
+          <input type="date" value={mi} onChange={(e) => setMi(e.target.value)} className={`${inputCls} mt-1`} />
+        </label>
+        <label className="text-xs font-medium">
+          Fim do mandato
+          <input type="date" value={mf} onChange={(e) => setMf(e.target.value)} className={`${inputCls} mt-1`} />
+        </label>
+        <label className="text-xs font-medium">
+          Data da posse
+          <input type="date" value={dp} onChange={(e) => setDp(e.target.value)} className={`${inputCls} mt-1`} />
+        </label>
+      </div>
+      <div className="mt-3 flex justify-end">
+        <button
+          onClick={() => m.mutate()}
+          disabled={m.isPending}
+          className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+        >
+          {m.isPending ? "Salvando..." : "Salvar datas"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/* ============ COMISSÃO ELEITORAL ============ */
+function CommissionTab({ electionId }: { electionId: string }) {
+  const listFn = useServerFn(listCommission);
+  const upFn = useServerFn(upsertCommissionMember);
+  const delFn = useServerFn(deleteCommissionMember);
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["commission", electionId], queryFn: () => listFn({ data: { electionId } }) });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["commission", electionId] });
+
+  const [nome, setNome] = useState("");
+  const [matricula, setMatricula] = useState("");
+  const [papel, setPapel] = useState<"presidente" | "secretario" | "membro">("membro");
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <Users className="h-4 w-4 text-primary" /> Comissão eleitoral
+        </h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          A NR-5 exige comissão eleitoral responsável pela condução, presidida por representante do empregador.
+        </p>
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!nome.trim()) return;
+            await upFn({ data: { election_id: electionId, nome: nome.trim(), matricula: matricula.trim() || null, papel } });
+            setNome("");
+            setMatricula("");
+            setPapel("membro");
+            invalidate();
+          }}
+          className="mt-4 grid gap-3 sm:grid-cols-4"
+        >
+          <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome" className={`${inputCls} sm:col-span-2`} required />
+          <input value={matricula} onChange={(e) => setMatricula(e.target.value)} placeholder="Matrícula" className={inputCls} />
+          <select value={papel} onChange={(e) => setPapel(e.target.value as typeof papel)} className={inputCls}>
+            <option value="presidente">Presidente</option>
+            <option value="secretario">Secretário</option>
+            <option value="membro">Membro</option>
+          </select>
+          <div className="sm:col-span-4 flex justify-end">
+            <button className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
+              <Plus className="mr-1 inline h-3.5 w-3.5" /> Adicionar
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-5">
+        <ul className="divide-y divide-border text-sm">
+          {(q.data ?? []).map((m) => (
+            <li key={m.id} className="flex items-center justify-between py-2">
+              <div>
+                <div className="font-medium">{m.nome}</div>
+                <div className="text-xs text-muted-foreground">
+                  {m.papel} {m.matricula ? `· mat. ${m.matricula}` : ""}
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  if (!confirm("Remover membro?")) return;
+                  await delFn({ data: { id: m.id } });
+                  invalidate();
+                }}
+                className="text-xs text-destructive hover:underline"
+              >
+                <Trash2 className="mr-1 inline h-3 w-3" /> Remover
+              </button>
+            </li>
+          ))}
+          {q.data && q.data.length === 0 && (
+            <li className="py-4 text-xs text-muted-foreground">Nenhum membro cadastrado.</li>
+          )}
+        </ul>
+      </section>
+    </div>
+  );
+}
+
+/* ============ IMPUGNAÇÕES ============ */
+function ChallengesTab({ electionId }: { electionId: string }) {
+  const listFn = useServerFn(listChallenges);
+  const judgeFn = useServerFn(judgeChallenge);
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["challenges", electionId], queryFn: () => listFn({ data: { electionId } }) });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["challenges", electionId] });
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <Gavel className="h-4 w-4 text-primary" /> Impugnações de candidaturas
+        </h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Eleitores podem impugnar candidaturas durante os períodos de inscrição e homologação. Julgue cada pedido antes de abrir a votação.
+        </p>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-5">
+        {q.data && q.data.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Nenhuma impugnação registrada.</p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {(q.data ?? []).map((c: any) => (
+              <li key={c.id} className="space-y-2 py-3 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium">
+                      Candidato: {c.candidates?.nome ?? "—"} (mat. {c.candidates?.matricula ?? "—"})
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Autor: {c.autor_nome} (mat. {c.autor_matricula}) · {new Date(c.created_at).toLocaleString("pt-BR")}
+                    </div>
+                  </div>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                      c.decisao === "pendente"
+                        ? "bg-amber-100 text-amber-800"
+                        : c.decisao === "deferido"
+                          ? "bg-destructive/15 text-destructive"
+                          : "bg-primary/15 text-primary"
+                    }`}
+                  >
+                    {c.decisao}
+                  </span>
+                </div>
+                <p className="rounded-md bg-muted/40 p-2 text-xs">{c.motivo}</p>
+                {c.justificativa && (
+                  <p className="text-xs text-muted-foreground">
+                    <strong>Justificativa:</strong> {c.justificativa}
+                  </p>
+                )}
+                {c.decisao === "pendente" && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        const j = prompt("Justificativa do deferimento (opcional):") ?? "";
+                        await judgeFn({ data: { id: c.id, decisao: "deferido", justificativa: j || null } });
+                        invalidate();
+                      }}
+                      className="rounded-md border border-destructive/30 bg-background px-3 py-1 text-xs text-destructive hover:bg-destructive/10"
+                    >
+                      Deferir (invalidar candidatura)
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const j = prompt("Justificativa do indeferimento (opcional):") ?? "";
+                        await judgeFn({ data: { id: c.id, decisao: "indeferido", justificativa: j || null } });
+                        invalidate();
+                      }}
+                      className="rounded-md border border-border bg-background px-3 py-1 text-xs hover:bg-muted"
+                    >
+                      Indeferir (manter candidatura)
+                    </button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+/* ============ AVISOS OFICIAIS ============ */
+const NOTICE_TYPES = [
+  ["edital", "Edital de convocação"],
+  ["homologacao_inscricoes", "Homologação de inscrições"],
+  ["abertura_votacao", "Abertura da votação"],
+  ["encerramento_votacao", "Encerramento da votação"],
+  ["resultado", "Divulgação do resultado"],
+  ["homologacao_resultado", "Homologação do resultado"],
+  ["posse", "Convocação para posse"],
+  ["geral", "Comunicado geral"],
+] as const;
+
+function NoticesTab({ electionId }: { electionId: string }) {
+  const listFn = useServerFn(listNotices);
+  const pubFn = useServerFn(publishNotice);
+  const delFn = useServerFn(deleteNotice);
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["notices", electionId], queryFn: () => listFn({ data: { electionId } }) });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["notices", electionId] });
+
+  const [tipo, setTipo] = useState<(typeof NOTICE_TYPES)[number][0]>("geral");
+  const [titulo, setTitulo] = useState("");
+  const [corpo, setCorpo] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <Megaphone className="h-4 w-4 text-primary" /> Publicar aviso oficial
+        </h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Avisos aparecem no portal do eleitor em /votar e servem como registro público do processo.
+        </p>
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setErr(null);
+            try {
+              await pubFn({ data: { election_id: electionId, tipo, titulo, corpo } });
+              setTitulo("");
+              setCorpo("");
+              invalidate();
+            } catch (x) {
+              setErr((x as Error).message);
+            }
+          }}
+          className="mt-4 space-y-3"
+        >
+          <div className="grid gap-3 sm:grid-cols-3">
+            <select value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)} className={inputCls}>
+              {NOTICE_TYPES.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+            <input
+              value={titulo}
+              onChange={(e) => setTitulo(e.target.value)}
+              placeholder="Título"
+              className={`${inputCls} sm:col-span-2`}
+              required
+            />
+          </div>
+          <textarea
+            value={corpo}
+            onChange={(e) => setCorpo(e.target.value)}
+            placeholder="Conteúdo do aviso"
+            rows={5}
+            className={inputCls}
+            required
+          />
+          {err && <p className="text-xs text-destructive">{err}</p>}
+          <div className="flex justify-end">
+            <button className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
+              Publicar
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h3 className="text-sm font-semibold">Avisos publicados</h3>
+        <ul className="mt-3 divide-y divide-border text-sm">
+          {(q.data ?? []).map((n) => (
+            <li key={n.id} className="space-y-1 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-medium">{n.titulo}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {n.tipo} · {new Date(n.publicado_em).toLocaleString("pt-BR")}
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!confirm("Remover aviso?")) return;
+                    await delFn({ data: { id: n.id } });
+                    invalidate();
+                  }}
+                  className="text-xs text-destructive hover:underline"
+                >
+                  Remover
+                </button>
+              </div>
+              <p className="whitespace-pre-wrap text-xs text-muted-foreground">{n.corpo}</p>
+            </li>
+          ))}
+          {q.data && q.data.length === 0 && (
+            <li className="py-4 text-xs text-muted-foreground">Nenhum aviso.</li>
+          )}
+        </ul>
+      </section>
     </div>
   );
 }
