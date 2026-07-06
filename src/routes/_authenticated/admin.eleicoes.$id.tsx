@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, Play, Square, Plus, Trash2, Printer, Award, AlertTriangle, CheckCircle2, Users, Gavel, Megaphone, ListChecks, Archive } from "lucide-react";
+import { ArrowLeft, Play, Plus, Trash2, Printer, Award, AlertTriangle, CheckCircle2, Users, Gavel, Megaphone, ListChecks, Archive } from "lucide-react";
 
 import {
   getElection,
