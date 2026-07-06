@@ -849,7 +849,7 @@ export const archiveElection = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const sb = await ensureAdmin(context.userId);
-    const patch: { arquivada: boolean; status?: string } = { arquivada: data.arquivada };
+    const patch: { arquivada: boolean; status?: "concluded" } = { arquivada: data.arquivada };
     if (data.arquivada) patch.status = "concluded";
     const { error } = await sb.from("elections").update(patch).eq("id", data.id);
     if (error) throw new Error(error.message);
