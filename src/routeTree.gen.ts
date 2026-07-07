@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as CandidatarRouteImport } from './routes/candidatar'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
@@ -25,6 +26,11 @@ import { Route as AuthenticatedAdminAuditoriaRouteImport } from './routes/_authe
 import { Route as AuthenticatedAdminAtasRouteImport } from './routes/_authenticated/admin.atas'
 import { Route as AuthenticatedAdminEleicoesIdRouteImport } from './routes/_authenticated/admin.eleicoes.$id'
 
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CandidatarRoute = CandidatarRouteImport.update({
   id: '/candidatar',
   path: '/candidatar',
@@ -109,6 +115,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/candidatar': typeof CandidatarRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/votar/cedula': typeof VotarCedulaRoute
   '/votar/confirmado': typeof VotarConfirmadoRoute
@@ -125,6 +132,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/candidatar': typeof CandidatarRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/votar/cedula': typeof VotarCedulaRoute
   '/votar/confirmado': typeof VotarConfirmadoRoute
   '/votar': typeof VotarIndexRoute
@@ -142,6 +150,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/candidatar': typeof CandidatarRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
   '/votar/cedula': typeof VotarCedulaRoute
   '/votar/confirmado': typeof VotarConfirmadoRoute
@@ -160,6 +169,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/candidatar'
+    | '/reset-password'
     | '/admin'
     | '/votar/cedula'
     | '/votar/confirmado'
@@ -176,6 +186,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/candidatar'
+    | '/reset-password'
     | '/votar/cedula'
     | '/votar/confirmado'
     | '/votar'
@@ -192,6 +203,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/candidatar'
+    | '/reset-password'
     | '/_authenticated/admin'
     | '/votar/cedula'
     | '/votar/confirmado'
@@ -210,6 +222,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   CandidatarRoute: typeof CandidatarRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   VotarCedulaRoute: typeof VotarCedulaRoute
   VotarConfirmadoRoute: typeof VotarConfirmadoRoute
   VotarIndexRoute: typeof VotarIndexRoute
@@ -217,6 +230,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/candidatar': {
       id: '/candidatar'
       path: '/candidatar'
@@ -376,6 +396,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   CandidatarRoute: CandidatarRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   VotarCedulaRoute: VotarCedulaRoute,
   VotarConfirmadoRoute: VotarConfirmadoRoute,
   VotarIndexRoute: VotarIndexRoute,
