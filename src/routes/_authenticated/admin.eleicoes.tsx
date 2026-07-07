@@ -25,9 +25,13 @@ type ElectionFormValues = {
 type ElectionRow = {
   id: string;
   nome: string;
+  descricao: string | null;
   status: string;
   vagas_titulares: number;
   vagas_suplentes: number;
+  data_inicio_inscricao: string | null;
+  data_fim_inscricao: string | null;
+  data_inicio_votacao: string | null;
   data_fim_votacao: string | null;
 };
 
@@ -160,10 +164,10 @@ function openEdit(row: ElectionRow, set: (v: ElectionFormValues) => void) {
   set({
     id: row.id,
     nome: row.nome,
-    descricao: null,
-    data_inicio_inscricao: null,
-    data_fim_inscricao: null,
-    data_inicio_votacao: null,
+    descricao: row.descricao,
+    data_inicio_inscricao: row.data_inicio_inscricao,
+    data_fim_inscricao: row.data_fim_inscricao,
+    data_inicio_votacao: row.data_inicio_votacao,
     data_fim_votacao: row.data_fim_votacao,
     vagas_titulares: row.vagas_titulares,
     vagas_suplentes: row.vagas_suplentes,
