@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { Plus, Upload, Trash2, Users } from "lucide-react";
+import { Plus, Upload, Trash2, Users, Pencil } from "lucide-react";
 
 import { listEmployees, upsertEmployee, deleteEmployee, importEmployees } from "@/lib/admin.functions";
 
@@ -11,6 +11,7 @@ export const Route = createFileRoute("/_authenticated/admin/empregados")({
 });
 
 type EmpInput = {
+  id?: string;
   matricula: string;
   nome: string;
   cpf: string | null;
@@ -28,13 +29,13 @@ function EmployeesPage() {
   const fnImport = useServerFn(importEmployees);
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<EmpInput | null>(null);
   const [importMsg, setImportMsg] = useState<string | null>(null);
 
   const q = useQuery({ queryKey: ["admin-employees"], queryFn: () => fnList() });
   const invalidate = () => qc.invalidateQueries({ queryKey: ["admin-employees"] });
 
-  const mUp = useMutation({ mutationFn: (v: EmpInput) => fnUp({ data: v }), onSuccess: () => { invalidate(); setOpen(false); } });
+  const mUp = useMutation({ mutationFn: (v: EmpInput) => fnUp({ data: v }), onSuccess: () => { invalidate(); setEditing(null); } });
   const mDel = useMutation({ mutationFn: (id: string) => fnDel({ data: { id } }), onSuccess: invalidate });
   const mImport = useMutation({
     mutationFn: (rows: EmpInput[]) => fnImport({ data: { rows } }),
@@ -64,7 +65,7 @@ function EmployeesPage() {
           <button onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted">
             <Upload className="h-3.5 w-3.5" /> Importar CSV
           </button>
-          <button onClick={() => setOpen(true)} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
+          <button onClick={() => setEditing({ matricula: "", nome: "", cpf: "", email: "", setor: "", cargo: "", data_nascimento: "", ativo: true })} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
             <Plus className="h-3.5 w-3.5" /> Novo
           </button>
         </div>
@@ -96,9 +97,26 @@ function EmployeesPage() {
                   <td>{e.setor ?? "—"}</td>
                   <td>{e.data_nascimento}</td>
                   <td>{e.ativo ? "Sim" : "Não"}</td>
-                  <td className="pr-3 text-right">
+                  <td className="pr-3 text-right space-x-2">
+                    <button
+                      onClick={() => setEditing({
+                        id: e.id,
+                        matricula: e.matricula,
+                        nome: e.nome,
+                        cpf: e.cpf ?? "",
+                        email: e.email ?? "",
+                        setor: e.setor ?? "",
+                        cargo: e.cargo ?? "",
+                        data_nascimento: e.data_nascimento,
+                        ativo: e.ativo,
+                      })}
+                      className="text-muted-foreground hover:text-foreground"
+                      title="Editar"
+                    >
+                      <Pencil className="h-4 w-4 inline" />
+                    </button>
                     <button onClick={() => confirm(`Excluir ${e.nome}?`) && mDel.mutate(e.id)} className="text-destructive">
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4 inline" />
                     </button>
                   </td>
                 </tr>
@@ -108,9 +126,10 @@ function EmployeesPage() {
         </div>
       )}
 
-      {open && (
+      {editing && (
         <EmpDialog
-          onClose={() => setOpen(false)}
+          initial={editing}
+          onClose={() => setEditing(null)}
           onSubmit={(v) => mUp.mutate(v)}
           pending={mUp.isPending}
           error={mUp.error as Error | null}
@@ -121,15 +140,25 @@ function EmployeesPage() {
 }
 
 function EmpDialog({
-  onClose, onSubmit, pending, error,
-}: { onClose: () => void; onSubmit: (v: EmpInput) => void; pending: boolean; error: Error | null }) {
-  const [f, setF] = useState({ matricula: "", nome: "", cpf: "", email: "", setor: "", cargo: "", data_nascimento: "" });
+  initial, onClose, onSubmit, pending, error,
+}: { initial: EmpInput; onClose: () => void; onSubmit: (v: EmpInput) => void; pending: boolean; error: Error | null }) {
+  const [f, setF] = useState({
+    matricula: initial.matricula ?? "",
+    nome: initial.nome ?? "",
+    cpf: initial.cpf ?? "",
+    email: initial.email ?? "",
+    setor: initial.setor ?? "",
+    cargo: initial.cargo ?? "",
+    data_nascimento: initial.data_nascimento ?? "",
+    ativo: initial.ativo ?? true,
+  });
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/40 p-4">
       <form
         onSubmit={(e) => {
           e.preventDefault();
           onSubmit({
+            id: initial.id,
             matricula: f.matricula,
             nome: f.nome,
             cpf: f.cpf || null,
@@ -137,12 +166,12 @@ function EmpDialog({
             setor: f.setor || null,
             cargo: f.cargo || null,
             data_nascimento: f.data_nascimento,
-            ativo: true,
+            ativo: f.ativo,
           });
         }}
         className="w-full max-w-md space-y-3 rounded-lg border border-border bg-card p-5 shadow-xl"
       >
-        <h3 className="text-lg font-semibold">Novo empregado</h3>
+        <h3 className="text-lg font-semibold">{initial.id ? "Editar empregado" : "Novo empregado"}</h3>
         <div className="grid grid-cols-2 gap-2">
           <input required placeholder="Matrícula" value={f.matricula} onChange={(e) => setF({ ...f, matricula: e.target.value })} className={inputCls} />
           <input required type="date" value={f.data_nascimento} onChange={(e) => setF({ ...f, data_nascimento: e.target.value })} className={inputCls} />
@@ -154,6 +183,10 @@ function EmpDialog({
           <input placeholder="Setor" value={f.setor} onChange={(e) => setF({ ...f, setor: e.target.value })} className={inputCls} />
           <input placeholder="Cargo" value={f.cargo} onChange={(e) => setF({ ...f, cargo: e.target.value })} className={inputCls} />
         </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={f.ativo} onChange={(e) => setF({ ...f, ativo: e.target.checked })} />
+          Ativo (elegível para votar e ser votado)
+        </label>
         {error && <p className="text-sm text-destructive">{error.message}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" onClick={onClose} className="rounded-md border border-border px-3 py-1.5 text-sm">Cancelar</button>

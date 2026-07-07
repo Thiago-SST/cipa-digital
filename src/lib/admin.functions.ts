@@ -107,7 +107,7 @@ export const listElections = createServerFn({ method: "GET" })
     const sb = await ensureAdmin(context.userId);
     const { data } = await sb
       .from("elections")
-      .select("id, nome, status, vagas_titulares, vagas_suplentes, data_fim_votacao, created_at")
+      .select("id, nome, descricao, status, vagas_titulares, vagas_suplentes, data_inicio_inscricao, data_fim_inscricao, data_inicio_votacao, data_fim_votacao, created_at")
       .order("created_at", { ascending: false });
     return data ?? [];
   });
