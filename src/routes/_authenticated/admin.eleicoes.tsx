@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Vote, Calendar } from "lucide-react";
+import { Plus, Vote, Calendar, Pencil } from "lucide-react";
 
 import { listElections, upsertElection } from "@/lib/admin.functions";
 
@@ -11,6 +11,7 @@ export const Route = createFileRoute("/_authenticated/admin/eleicoes")({
 });
 
 type ElectionFormValues = {
+  id?: string;
   nome: string;
   descricao: string | null;
   data_inicio_inscricao: string | null;
@@ -21,16 +22,35 @@ type ElectionFormValues = {
   vagas_suplentes: number;
 };
 
+type ElectionRow = {
+  id: string;
+  nome: string;
+  status: string;
+  vagas_titulares: number;
+  vagas_suplentes: number;
+  data_fim_votacao: string | null;
+};
+
 const STATUS_LABEL: Record<string, string> = {
   draft: "Rascunho",
+  published: "Publicada",
   registration: "Inscrições",
+  homologation: "Homologação",
   voting: "Em votação",
+  counting: "Apuração",
+  result_homologation: "Homolog. resultado",
+  concluded: "Concluída",
   closed: "Encerrada",
 };
 const STATUS_TONE: Record<string, string> = {
   draft: "bg-muted text-foreground",
+  published: "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-200",
   registration: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200",
+  homologation: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200",
   voting: "bg-primary/15 text-primary",
+  counting: "bg-primary/15 text-primary",
+  result_homologation: "bg-primary/15 text-primary",
+  concluded: "bg-secondary text-secondary-foreground",
   closed: "bg-secondary text-secondary-foreground",
 };
 
@@ -38,7 +58,7 @@ function ElectionsPage() {
   const list = useServerFn(listElections);
   const upsert = useServerFn(upsertElection);
   const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<ElectionFormValues | null>(null);
 
   const q = useQuery({ queryKey: ["admin-elections"], queryFn: () => list() });
 
@@ -46,7 +66,7 @@ function ElectionsPage() {
     mutationFn: (input: ElectionFormValues) => upsert({ data: input }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-elections"] });
-      setOpen(false);
+      setEditing(null);
     },
   });
 
@@ -58,7 +78,18 @@ function ElectionsPage() {
           <p className="mt-1 text-sm text-muted-foreground">Crie e gerencie ciclos eleitorais da CIPA.</p>
         </div>
         <button
-          onClick={() => setOpen(true)}
+          onClick={() =>
+            setEditing({
+              nome: "",
+              descricao: "",
+              data_inicio_inscricao: "",
+              data_fim_inscricao: "",
+              data_inicio_votacao: "",
+              data_fim_votacao: "",
+              vagas_titulares: 3,
+              vagas_suplentes: 3,
+            } as unknown as ElectionFormValues)
+          }
           className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" /> Nova eleição
@@ -76,10 +107,11 @@ function ElectionsPage() {
         <ul className="grid gap-3">
           {q.data.map((e) => (
             <li key={e.id}>
-              <Link
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card p-5 transition hover:border-primary/40">
+                <Link
                 to="/admin/eleicoes/$id"
                 params={{ id: e.id }}
-                className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card p-5 transition hover:border-primary/40"
+                className="min-w-0 flex-1"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -97,23 +129,55 @@ function ElectionsPage() {
                     )}
                   </div>
                 </div>
-              </Link>
+                </Link>
+                <button
+                  onClick={() => openEdit(e as ElectionRow, setEditing)}
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs hover:bg-muted"
+                  title="Editar"
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Editar
+                </button>
+              </div>
             </li>
           ))}
         </ul>
       )}
 
-      {open && <ElectionDialog onClose={() => setOpen(false)} onSubmit={(v) => m.mutate(v)} pending={m.isPending} error={m.error as Error | null} />}
+      {editing && (
+        <ElectionDialog
+          initial={editing}
+          onClose={() => setEditing(null)}
+          onSubmit={(v) => m.mutate({ ...v, id: editing.id })}
+          pending={m.isPending}
+          error={m.error as Error | null}
+        />
+      )}
     </div>
   );
 }
 
+function openEdit(row: ElectionRow, set: (v: ElectionFormValues) => void) {
+  set({
+    id: row.id,
+    nome: row.nome,
+    descricao: null,
+    data_inicio_inscricao: null,
+    data_fim_inscricao: null,
+    data_inicio_votacao: null,
+    data_fim_votacao: row.data_fim_votacao,
+    vagas_titulares: row.vagas_titulares,
+    vagas_suplentes: row.vagas_suplentes,
+  });
+}
+
 function ElectionDialog({
+  initial,
   onClose,
   onSubmit,
   pending,
   error,
 }: {
+  initial: ElectionFormValues;
   onClose: () => void;
   onSubmit: (v: {
     nome: string;
@@ -128,15 +192,16 @@ function ElectionDialog({
   pending: boolean;
   error: Error | null;
 }) {
+  const toLocal = (v: string | null | undefined) => (v ? v.slice(0, 16) : "");
   const [form, setForm] = useState({
-    nome: "",
-    descricao: "",
-    data_inicio_inscricao: "",
-    data_fim_inscricao: "",
-    data_inicio_votacao: "",
-    data_fim_votacao: "",
-    vagas_titulares: 3,
-    vagas_suplentes: 3,
+    nome: initial.nome ?? "",
+    descricao: initial.descricao ?? "",
+    data_inicio_inscricao: toLocal(initial.data_inicio_inscricao),
+    data_fim_inscricao: toLocal(initial.data_fim_inscricao),
+    data_inicio_votacao: toLocal(initial.data_inicio_votacao),
+    data_fim_votacao: toLocal(initial.data_fim_votacao),
+    vagas_titulares: initial.vagas_titulares ?? 3,
+    vagas_suplentes: initial.vagas_suplentes ?? 3,
   });
 
   return (
@@ -157,7 +222,7 @@ function ElectionDialog({
         }}
         className="w-full max-w-lg space-y-4 rounded-lg border border-border bg-card p-6 shadow-xl"
       >
-        <h2 className="text-lg font-semibold">Nova eleição</h2>
+        <h2 className="text-lg font-semibold">{initial.id ? "Editar eleição" : "Nova eleição"}</h2>
         <Field label="Nome">
           <input required value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className={inputCls} />
         </Field>
