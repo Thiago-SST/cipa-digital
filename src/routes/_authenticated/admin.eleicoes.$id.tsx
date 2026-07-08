@@ -1488,3 +1488,168 @@ function AtaTab({ electionId }: { electionId: string }) {
 }
 
 const inputCls = "w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-ring focus:ring-2";
+
+/* ============ ACOMPANHAR (LIVE) ============ */
+function LiveMonitorTab({ electionId, status }: { electionId: string; status: ElectionStatus }) {
+  const fn = useServerFn(getElectionLiveMonitor);
+  const isVoting = status === "voting";
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const q = useQuery({
+    queryKey: ["live-monitor", electionId],
+    queryFn: () => fn({ data: { electionId } }),
+    refetchInterval: autoRefresh ? (isVoting ? 5000 : 15000) : false,
+    refetchIntervalInBackground: false,
+  });
+
+  if (q.isLoading) return <p className="text-sm text-muted-foreground">Carregando monitor...</p>;
+  if (!q.data) return <p className="text-sm text-muted-foreground">Sem dados.</p>;
+  const d = q.data;
+  const turnout = d.stats.eleitoresAptos ? (d.stats.eleitoresQueVotaram / d.stats.eleitoresAptos) * 100 : 0;
+  const maxVotos = d.ranking.reduce((m, c) => Math.max(m, c.votos), 0) || 1;
+  const maxBucket = d.buckets.reduce((m, b) => Math.max(m, b.votos), 0) || 1;
+  const updated = new Date(d.generatedAt);
+
+  return (
+    <div className="space-y-6">
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
+        <div className="flex items-center gap-2 text-sm">
+          <span className={`grid h-8 w-8 place-items-center rounded-full ${isVoting ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}>
+            <Activity className={`h-4 w-4 ${isVoting && autoRefresh ? "animate-pulse" : ""}`} />
+          </span>
+          <div>
+            <div className="font-semibold">
+              {isVoting ? "Votação em andamento" : "Votação não está aberta"}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Atualizado às {updated.toLocaleTimeString("pt-BR")} · {autoRefresh ? (isVoting ? "atualiza a cada 5s" : "a cada 15s") : "pausado"}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAutoRefresh((v) => !v)}
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-muted"
+          >
+            {autoRefresh ? <><Pause className="h-3.5 w-3.5" /> Pausar</> : <><Play className="h-3.5 w-3.5" /> Retomar</>}
+          </button>
+          <button
+            onClick={() => q.refetch()}
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-muted"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${q.isFetching ? "animate-spin" : ""}`} /> Atualizar
+          </button>
+        </div>
+      </section>
+
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Stat label="Votos registrados" value={d.stats.eleitoresQueVotaram} />
+        <Stat label="Aptos a votar" value={d.stats.eleitoresAptos} />
+        <Stat label="Comparecimento" value={`${turnout.toFixed(1)}%`} />
+        <Stat label="Faltam votar" value={Math.max(0, d.stats.eleitoresAptos - d.stats.eleitoresQueVotaram)} />
+      </div>
+
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h2 className="text-sm font-semibold">Comparecimento</h2>
+        <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-muted">
+          <div className="h-full bg-primary transition-all" style={{ width: `${Math.min(100, turnout)}%` }} />
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {d.stats.eleitoresQueVotaram} de {d.stats.eleitoresAptos} eleitores já votaram.
+        </p>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h2 className="text-sm font-semibold">Ritmo de votação (últimos 60 min)</h2>
+        <div className="mt-3 flex h-32 items-end gap-1">
+          {d.buckets.map((b, i) => (
+            <div key={i} className="flex flex-1 flex-col items-center gap-1" title={`${b.votos} voto(s) até ${new Date(b.ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`}>
+              <div className="text-[10px] text-muted-foreground">{b.votos || ""}</div>
+              <div
+                className="w-full rounded-t bg-primary/70 transition-all"
+                style={{ height: `${(b.votos / maxBucket) * 100}%`, minHeight: b.votos ? 4 : 1 }}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
+          <span>-60 min</span>
+          <span>agora</span>
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Ranking parcial</h2>
+          <span className="text-xs text-muted-foreground">
+            {d.stats.nominais} nominais · {d.stats.brancos} brancos · {d.stats.nulos} nulos
+          </span>
+        </div>
+        {d.ranking.length === 0 ? (
+          <p className="mt-3 text-sm text-muted-foreground">Sem candidatos aprovados.</p>
+        ) : (
+          <ul className="mt-4 space-y-2">
+            {d.ranking.map((c, i) => {
+              const pct = d.stats.nominais ? (c.votos / d.stats.nominais) * 100 : 0;
+              const barPct = (c.votos / maxVotos) * 100;
+              const eleito = i < d.stats.vagasTitulares;
+              const suplente = !eleito && i < d.stats.vagasTitulares + d.stats.vagasSuplentes;
+              return (
+                <li key={c.id} className="rounded-md border border-border bg-background p-3">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-muted text-[11px] font-bold">
+                        {i + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">
+                          {c.numero ? `${c.numero} — ` : ""}{c.nome}
+                        </div>
+                        <div className="truncate text-xs text-muted-foreground">
+                          {c.setor ?? ""}{c.setor && c.matricula ? " · " : ""}mat. {c.matricula}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {eleito && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary">Titular</span>}
+                      {suplente && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">Suplente</span>}
+                      <div className="text-right">
+                        <div className="font-semibold tabular-nums">{c.votos}</div>
+                        <div className="text-[10px] text-muted-foreground">{pct.toFixed(1)}%</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div className="h-full bg-primary transition-all" style={{ width: `${barPct}%` }} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h2 className="text-sm font-semibold">Últimos votos registrados</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          O voto é secreto — mostramos apenas o horário em que cada eleitor confirmou o voto.
+        </p>
+        {d.recentVotes.length === 0 ? (
+          <p className="mt-3 text-sm text-muted-foreground">Nenhum voto ainda.</p>
+        ) : (
+          <ul className="mt-3 divide-y divide-border text-sm">
+            {d.recentVotes.map((v, i) => (
+              <li key={i} className="flex items-center justify-between py-1.5">
+                <span className="inline-flex items-center gap-2 text-muted-foreground">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Voto confirmado
+                </span>
+                <span className="tabular-nums text-xs text-muted-foreground">
+                  {new Date(v.voted_at).toLocaleString("pt-BR")}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
