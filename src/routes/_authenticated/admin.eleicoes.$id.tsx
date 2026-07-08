@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, Play, Plus, Trash2, Printer, Award, AlertTriangle, CheckCircle2, Users, Gavel, Megaphone, ListChecks, Archive } from "lucide-react";
+import { ArrowLeft, Play, Plus, Trash2, Printer, Award, AlertTriangle, CheckCircle2, Users, Gavel, Megaphone, ListChecks, Archive, Activity, RefreshCw, Pause } from "lucide-react";
 
 import {
   getElection,
@@ -30,6 +30,7 @@ import {
   homologateResult,
   archiveElection,
   updateElectionMilestones,
+  getElectionLiveMonitor,
 } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/eleicoes/$id")({
@@ -43,6 +44,7 @@ type Tab =
   | "candidatos"
   | "impugnacoes"
   | "avisos"
+  | "acompanhar"
   | "apuracao"
   | "ata"
   | "documentos";
@@ -101,6 +103,7 @@ function ElectionDetail() {
             "candidatos",
             "impugnacoes",
             "avisos",
+            "acompanhar",
             "apuracao",
             "ata",
             "documentos",
@@ -124,6 +127,7 @@ function ElectionDetail() {
       {tab === "candidatos" && <CandidatesTab electionId={id} />}
       {tab === "impugnacoes" && <ChallengesTab electionId={id} />}
       {tab === "avisos" && <NoticesTab electionId={id} />}
+      {tab === "acompanhar" && <LiveMonitorTab electionId={id} status={el.status as ElectionStatus} />}
       {tab === "apuracao" && <ResultsTab electionId={id} />}
       {tab === "ata" && <AtaTab electionId={id} />}
       {tab === "documentos" && <DocumentsTab electionId={id} />}
@@ -139,6 +143,7 @@ function tabLabel(t: Tab): string {
     candidatos: "Candidatos",
     impugnacoes: "Impugnações",
     avisos: "Avisos",
+    acompanhar: "Acompanhar",
     apuracao: "Apuração",
     ata: "Ata",
     documentos: "Documentos",
