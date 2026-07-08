@@ -1,25 +1,32 @@
-Você já disparou o email de recuperação (o `POST /auth/v1/recover` voltou 200), mas hoje o app não tem a página que finaliza a troca: o link do email leva ao `/auth`, faz login automático e nunca pede senha nova. Por isso "não funciona".
+## Objetivo
+Corrigir o erro "Sessão expirada" ao votar, causado pelo cookie de sessão do eleitor não ser enviado em contexto de iframe (preview) e potencialmente em navegações cross-site.
 
-## O que fazer
+## Causa raiz
+`src/lib/voter-session.server.ts` cria o cookie com `sameSite: "lax"`. Dentro do iframe do preview Lovable, o cookie é tratado como third-party e bloqueado a partir da segunda requisição. O login "funciona" (Set-Cookie chega), mas as chamadas seguintes (`getVoterBallot`, `castVote`) não enviam o cookie → o servidor retorna `authenticated: false` / lança "Sessão expirada".
 
-**1. Criar página `/reset-password` (obrigatória)**
-- Nova rota pública `src/routes/reset-password.tsx`.
-- Detecta o `type=recovery` no hash da URL (Supabase entrega o token no `#access_token=...&type=recovery`).
-- Formulário com "nova senha" + "confirmar" → chama `supabase.auth.updateUser({ password })`.
-- Ao concluir, faz signOut e redireciona para `/auth` com aviso "senha alterada, faça login".
+## Mudanças
 
-**2. Ajustar `src/routes/auth.tsx`**
-- Trocar `redirectTo: origin + "/auth"` por `origin + "/reset-password"` no `resetPasswordForEmail`.
-- Mensagem de sucesso já existe, mantida.
+### 1. `src/lib/voter-session.server.ts`
+- Trocar `sameSite: "lax"` por `sameSite: "none"`.
+- Manter `secure: true` (obrigatório com `sameSite: "none"`) e `httpOnly: true`.
+- Nenhuma outra alteração de shape/API.
 
-**3. Reenviar o email**
-- Depois do deploy, use "Esqueci minha senha" de novo. O novo link vai levar direto à tela de redefinição.
+Efeito: o cookie passa a ser enviado em iframes cross-site (preview) e em navegações top-level normais no site publicado. `httpOnly` + `secure` continuam protegendo contra XSS/interceptação; a proteção contra CSRF é dada pelo fato de que todas as ações críticas (`castVote`, `registerCandidacy`) são server functions do próprio domínio invocadas via fetch same-origin com validação de entrada por Zod e verificações de janela/eleição no handler.
 
-## Alternativa imediata (opcional)
+### 2. Verificação
+Após o build, testar o fluxo:
+1. `/votar` → login com matrícula/data → deve navegar para `/votar/cedula` mostrando a cédula (não "sessão expirada").
+2. Selecionar candidato → Confirmar voto → deve chegar em `/votar/confirmado`.
 
-Se quiser destravar agora sem esperar email, posso adicionar uma ação única de "resetar senha por email" no painel (usando service role) **ou** simplesmente resetar sua senha manualmente via backend nesta conversa e te passar uma senha temporária que você troca no primeiro login. Me diga se prefere esse caminho — nesse caso preciso confirmar seu email (`thiagoenzocorrea@gmail.com`) e uma senha temporária que você quer usar.
+Se o problema persistir após a mudança, investigar via Playwright headless no localhost para descartar bug adicional em `getVoterSession()` (ex.: `SESSION_SECRET` ausente em runtime).
 
-## Fora do escopo
+## Fora de escopo
+- Alterar autenticação do admin (Supabase Auth).
+- Reescrever storage de sessão (manter `useSession` do TanStack Start).
+- Alterar RLS, migrations ou schema.
 
-- Não vou mexer nos templates de email do Supabase (o padrão já funciona para recuperação).
-- Sem alterar RLS nem outras rotas.
+## Detalhes técnicos
+`sameSite: "none"` + `secure: true` é o padrão recomendado quando o app pode ser embutido em iframe (preview) e quando cookies de sessão precisam sobreviver a redirecionamentos entre origens. É seguro aqui porque:
+- Cookie é `httpOnly` (JS não lê).
+- Só transmitido em HTTPS.
+- As mutations sensíveis validam a eleição/janela e usam UNIQUE em `vote_tokens` para impedir voto duplicado, então CSRF não permite votar sem antes ter autenticado como o próprio empregado.
