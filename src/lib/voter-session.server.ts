@@ -18,7 +18,7 @@ export function getVoterSession() {
     maxAge: 60 * 60 * 2, // 2 horas
     cookie: {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "none",
       secure: true,
       path: "/",
     },
