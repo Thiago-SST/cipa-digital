@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Play, Plus, Trash2, Printer, Award, AlertTriangle, CheckCircle2, Users, Gavel, Megaphone, ListChecks, Archive, Activity, RefreshCw, Pause } from "lucide-react";
 
 import {
@@ -1494,12 +1495,52 @@ function LiveMonitorTab({ electionId, status }: { electionId: string; status: El
   const fn = useServerFn(getElectionLiveMonitor);
   const isVoting = status === "voting";
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [live, setLive] = useState(false);
   const q = useQuery({
     queryKey: ["live-monitor", electionId],
     queryFn: () => fn({ data: { electionId } }),
-    refetchInterval: autoRefresh ? (isVoting ? 5000 : 15000) : false,
+    refetchInterval: autoRefresh ? (live ? 60000 : isVoting ? 5000 : 15000) : false,
     refetchIntervalInBackground: false,
   });
+
+  const refetchRef = useRef(q.refetch);
+  refetchRef.current = q.refetch;
+
+  useEffect(() => {
+    if (!autoRefresh) {
+      setLive(false);
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const bump = () => {
+      if (timer) return;
+      // agrupa rajadas de votos em uma única atualização
+      timer = setTimeout(() => {
+        timer = null;
+        void refetchRef.current();
+      }, 400);
+    };
+
+    const channel = supabase
+      .channel(`live-monitor-${electionId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "votes", filter: `election_id=eq.${electionId}` },
+        bump,
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "vote_tokens", filter: `election_id=eq.${electionId}` },
+        bump,
+      )
+      .subscribe((s) => setLive(s === "SUBSCRIBED"));
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      setLive(false);
+      supabase.removeChannel(channel);
+    };
+  }, [electionId, autoRefresh]);
 
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Carregando monitor...</p>;
   if (!q.data) return <p className="text-sm text-muted-foreground">Sem dados.</p>;
@@ -1521,7 +1562,8 @@ function LiveMonitorTab({ electionId, status }: { electionId: string; status: El
               {isVoting ? "Votação em andamento" : "Votação não está aberta"}
             </div>
             <div className="text-xs text-muted-foreground">
-              Atualizado às {updated.toLocaleTimeString("pt-BR")} · {autoRefresh ? (isVoting ? "atualiza a cada 5s" : "a cada 15s") : "pausado"}
+              Atualizado às {updated.toLocaleTimeString("pt-BR")} ·{" "}
+              {!autoRefresh ? "pausado" : live ? "tempo real (WebSocket)" : isVoting ? "atualiza a cada 5s" : "a cada 15s"}
             </div>
           </div>
         </div>
