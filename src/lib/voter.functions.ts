@@ -153,11 +153,14 @@ export const getVoterBallot = createServerFn({ method: "GET" }).handler(async ()
       .maybeSingle(),
   ]);
 
+  const { withPhotoUrls } = await import("./photos.server");
+  const candidatesWithPhotos = await withPhotoUrls(supabaseAdmin, candidates ?? []);
+
   return {
     authenticated: true as const,
     voter: { nome: session.data.nome!, matricula: session.data.matricula! },
     election,
-    candidates: candidates ?? [],
+    candidates: candidatesWithPhotos,
     hasVoted: !!token,
     votedAt: token?.voted_at ?? null,
   };
@@ -302,19 +305,60 @@ export const getMyCandidacy = createServerFn({ method: "GET" }).handler(async ()
 
   const { data: cand } = await supabaseAdmin
     .from("candidates")
-    .select("id, status, proposta, setor, cargo, created_at")
+    .select("id, status, proposta, setor, cargo, foto_url, created_at")
     .eq("election_id", election.id)
     .eq("employee_id", session.data.employeeId)
     .maybeSingle();
+
+  const { resolvePhotoUrl } = await import("./photos.server");
 
   return {
     authenticated: true as const,
     voter: { nome: session.data.nome!, matricula: session.data.matricula! },
     election,
-    candidacy: cand,
+    candidacy: cand ? { ...cand, foto_display_url: await resolvePhotoUrl(supabaseAdmin, cand.foto_url) } : null,
     inWindow: isWithinWindow(election.data_inicio_inscricao, election.data_fim_inscricao),
   };
 });
+
+/** Envio/troca da foto da própria candidatura (eleitor logado). */
+export const uploadMyCandidacyPhoto = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        fileName: z.string().trim().min(1).max(200),
+        fileBase64: z.string().min(10),
+        mimeType: z.string().trim().min(3).max(120),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { getVoterSession } = await import("./voter-session.server");
+    const { uploadCandidatePhotoFile, resolvePhotoUrl } = await import("./photos.server");
+    const session = await getVoterSession();
+    if (!session.data.employeeId) throw new Error("Faça login para enviar a foto.");
+
+    const { data: cand } = await supabaseAdmin
+      .from("candidates")
+      .select("id, foto_url")
+      .eq("employee_id", session.data.employeeId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!cand) throw new Error("Você ainda não possui uma inscrição.");
+
+    const path = await uploadCandidatePhotoFile(supabaseAdmin, {
+      candidateId: cand.id,
+      fileName: data.fileName,
+      fileBase64: data.fileBase64,
+      mimeType: data.mimeType,
+      previousPath: cand.foto_url,
+    });
+    const { error } = await supabaseAdmin.from("candidates").update({ foto_url: path }).eq("id", cand.id);
+    if (error) throw new Error(error.message);
+    return { url: await resolvePhotoUrl(supabaseAdmin, path) };
+  });
 
 /* ============ AVISOS / IMPUGNAÇÕES PÚBLICAS ============ */
 export const listPublicNotices = createServerFn({ method: "GET" }).handler(async () => {

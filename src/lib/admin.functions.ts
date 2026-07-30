@@ -172,6 +172,46 @@ export const getElection = createServerFn({ method: "GET" })
     return el;
   });
 
+export const deleteElection = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+
+    const [{ count: votes }, { count: tokens }] = await Promise.all([
+      sb.from("votes").select("id", { count: "exact", head: true }).eq("election_id", data.id),
+      sb.from("vote_tokens").select("id", { count: "exact", head: true }).eq("election_id", data.id),
+    ]);
+    if ((votes ?? 0) > 0 || (tokens ?? 0) > 0) {
+      throw new Error(
+        "Esta eleição já possui votos registrados e não pode ser excluída. Use o arquivamento para preservar a auditoria.",
+      );
+    }
+
+    const { data: docs } = await sb
+      .from("election_documents")
+      .select("file_path")
+      .eq("election_id", data.id);
+    const paths = (docs ?? []).map((d) => d.file_path).filter((p): p is string => !!p);
+    if (paths.length) await sb.storage.from("election-documents").remove(paths);
+
+    await sb.from("candidate_challenges").delete().eq("election_id", data.id);
+    await sb.from("election_notices").delete().eq("election_id", data.id);
+    await sb.from("election_commission_members").delete().eq("election_id", data.id);
+    await sb.from("election_documents").delete().eq("election_id", data.id);
+    await sb.from("candidates").delete().eq("election_id", data.id);
+
+    const { error } = await sb.from("elections").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+
+    await sb.from("access_logs").insert({
+      ator: context.userId,
+      acao: "election.delete",
+      detalhes: { electionId: data.id },
+    });
+    return { ok: true };
+  });
+
 /* ============ CANDIDATOS ============ */
 const candidateSchema = z.object({
   id: z.string().uuid().optional(),
@@ -195,7 +235,8 @@ export const listCandidates = createServerFn({ method: "GET" })
       .select("*")
       .eq("election_id", data.electionId)
       .order("numero", { ascending: true, nullsFirst: false });
-    return list ?? [];
+    const { withPhotoUrls } = await import("./photos.server");
+    return withPhotoUrls(sb, list ?? []);
   });
 
 export const upsertCandidate = createServerFn({ method: "POST" })
@@ -219,6 +260,57 @@ export const deleteCandidate = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sb = await ensureAdmin(context.userId);
     const { error } = await sb.from("candidates").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const uploadCandidatePhoto = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        candidateId: z.string().uuid(),
+        fileName: z.string().trim().min(1).max(200),
+        fileBase64: z.string().min(10),
+        mimeType: z.string().trim().min(3).max(120),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { uploadCandidatePhotoFile, resolvePhotoUrl } = await import("./photos.server");
+    const { data: current } = await sb
+      .from("candidates")
+      .select("foto_url")
+      .eq("id", data.candidateId)
+      .maybeSingle();
+    const path = await uploadCandidatePhotoFile(sb, {
+      candidateId: data.candidateId,
+      fileName: data.fileName,
+      fileBase64: data.fileBase64,
+      mimeType: data.mimeType,
+      previousPath: current?.foto_url ?? null,
+    });
+    const { error } = await sb.from("candidates").update({ foto_url: path }).eq("id", data.candidateId);
+    if (error) throw new Error(error.message);
+    return { path, url: await resolvePhotoUrl(sb, path) };
+  });
+
+export const removeCandidatePhoto = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ candidateId: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { isStoragePath, CANDIDATE_PHOTO_BUCKET } = await import("./photos.server");
+    const { data: current } = await sb
+      .from("candidates")
+      .select("foto_url")
+      .eq("id", data.candidateId)
+      .maybeSingle();
+    if (isStoragePath(current?.foto_url)) {
+      await sb.storage.from(CANDIDATE_PHOTO_BUCKET).remove([current!.foto_url as string]);
+    }
+    const { error } = await sb.from("candidates").update({ foto_url: null }).eq("id", data.candidateId);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -377,6 +469,81 @@ export const getElectionResults = createServerFn({ method: "GET" })
   });
 
 /* ============ ATA ============ */
+export const generateAtaPdf = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        electionId: z.string().uuid(),
+        observacoes: z.string().trim().max(3000).optional().nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { computeElectionResults } = await import("./results.server");
+    const { buildAtaApuracaoPdf } = await import("./ata-pdf.server");
+
+    const results = await computeElectionResults(sb, data.electionId);
+    const [{ data: org }, { data: commission }] = await Promise.all([
+      sb.from("organization_settings").select("nome, cnpj, endereco").limit(1).maybeSingle(),
+      sb
+        .from("election_commission_members")
+        .select("nome, papel, matricula")
+        .eq("election_id", data.electionId)
+        .order("papel"),
+    ]);
+
+    const emitidoEm = new Date().toISOString();
+    const bytes = await buildAtaApuracaoPdf({
+      org: {
+        nome: org?.nome ?? "Organização",
+        cnpj: org?.cnpj ?? null,
+        endereco: org?.endereco ?? null,
+      },
+      election: results.election as never,
+      commission: commission ?? [],
+      stats: results.stats,
+      ranking: results.ranking.map((c) => ({
+        posicao: c.posicao,
+        nome: c.nome,
+        matricula: c.matricula,
+        numero: c.numero,
+        votos: c.votos,
+        classificacao: c.classificacao,
+      })),
+      observacoes: data.observacoes ?? null,
+      emitidoEm,
+    });
+
+    const fileName = `ata-apuracao-${emitidoEm.slice(0, 10)}.pdf`;
+    const path = `${data.electionId}/${Date.now()}-${fileName}`;
+    const { error: upErr } = await sb.storage
+      .from("election-documents")
+      .upload(path, bytes, { contentType: "application/pdf", upsert: false });
+    if (upErr) throw new Error(upErr.message);
+
+    const { error: dbErr } = await sb.from("election_documents").insert({
+      election_id: data.electionId,
+      tipo: "apuracao",
+      titulo: `Ata de Apuração — ${results.election.nome}`,
+      file_path: path,
+      file_name: fileName,
+      created_by: context.userId,
+      conteudo: { gerado_automaticamente: true, stats: results.stats },
+    });
+    if (dbErr) throw new Error(dbErr.message);
+
+    await sb.from("access_logs").insert({
+      ator: context.userId,
+      acao: "document.ata_pdf",
+      detalhes: { electionId: data.electionId },
+    });
+
+    const { data: signed } = await sb.storage.from("election-documents").createSignedUrl(path, 600);
+    return { url: signed?.signedUrl ?? null, fileName };
+  });
+
 export const saveAta = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
@@ -609,14 +776,132 @@ export const updateOrgSettings = createServerFn({ method: "POST" })
 /* ============ AUDITORIA ============ */
 export const listAuditEvents = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        acao: z.string().trim().max(80).optional().nullable(),
+        ator: z.string().trim().max(120).optional().nullable(),
+        desde: z.string().optional().nullable(),
+        ate: z.string().optional().nullable(),
+        page: z.number().int().min(0).max(500).optional(),
+        pageSize: z.number().int().min(10).max(200).optional(),
+      })
+      .parse(d ?? {}),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const page = data.page ?? 0;
+    const pageSize = data.pageSize ?? 50;
+
+    let query = sb.from("access_logs").select("*", { count: "exact" });
+    if (data.acao) query = query.ilike("acao", `${data.acao}%`);
+    if (data.ator) query = query.ilike("ator", `%${data.ator}%`);
+    if (data.desde) query = query.gte("created_at", new Date(data.desde).toISOString());
+    if (data.ate) query = query.lte("created_at", new Date(`${data.ate.slice(0, 10)}T23:59:59`).toISOString());
+
+    const { data: rows, count } = await query
+      .order("created_at", { ascending: false })
+      .range(page * pageSize, page * pageSize + pageSize - 1);
+
+    return { rows: rows ?? [], total: count ?? 0, page, pageSize };
+  });
+
+export const exportAuditCsv = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        acao: z.string().trim().max(80).optional().nullable(),
+        ator: z.string().trim().max(120).optional().nullable(),
+        desde: z.string().optional().nullable(),
+        ate: z.string().optional().nullable(),
+      })
+      .parse(d ?? {}),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    let query = sb.from("access_logs").select("created_at, ator, acao, ip, detalhes");
+    if (data.acao) query = query.ilike("acao", `${data.acao}%`);
+    if (data.ator) query = query.ilike("ator", `%${data.ator}%`);
+    if (data.desde) query = query.gte("created_at", new Date(data.desde).toISOString());
+    if (data.ate) query = query.lte("created_at", new Date(`${data.ate.slice(0, 10)}T23:59:59`).toISOString());
+    const { data: rows } = await query.order("created_at", { ascending: false }).limit(5000);
+    const csv = toCsv(
+      (rows ?? []).map((r) => ({
+        data: r.created_at,
+        ator: r.ator ?? "",
+        acao: r.acao,
+        ip: r.ip ?? "",
+        detalhes: r.detalhes ? JSON.stringify(r.detalhes) : "",
+      })),
+    );
+    return { filename: `auditoria-${new Date().toISOString().slice(0, 10)}.csv`, csv };
+  });
+
+/* ============ USUÁRIOS / PAPÉIS ============ */
+export const listAdminUsers = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const sb = await ensureAdmin(context.userId);
-    const { data } = await sb
-      .from("access_logs")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200);
-    return data ?? [];
+    const { data: roles } = await sb.from("user_roles").select("id, user_id, role, created_at");
+    const { data: usersPage } = await sb.auth.admin.listUsers({ page: 1, perPage: 200 });
+    const emailById = new Map((usersPage?.users ?? []).map((u) => [u.id, u.email ?? ""]));
+    return (usersPage?.users ?? []).map((u) => ({
+      userId: u.id,
+      email: u.email ?? "",
+      createdAt: u.created_at,
+      lastSignInAt: u.last_sign_in_at ?? null,
+      roles: (roles ?? []).filter((r) => r.user_id === u.id).map((r) => r.role as string),
+      isSelf: u.id === context.userId,
+      _email: emailById.get(u.id),
+    }));
+  });
+
+export const setUserRole = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        userId: z.string().uuid(),
+        role: z.enum(["admin", "organizador"]),
+        grant: z.boolean(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+
+    if (!data.grant && data.role === "admin") {
+      if (data.userId === context.userId) {
+        throw new Error("Você não pode remover o seu próprio acesso de administrador.");
+      }
+      const { count } = await sb
+        .from("user_roles")
+        .select("id", { count: "exact", head: true })
+        .eq("role", "admin");
+      if ((count ?? 0) <= 1) throw new Error("É necessário manter ao menos um administrador.");
+    }
+
+    if (data.grant) {
+      const { error } = await sb
+        .from("user_roles")
+        .upsert({ user_id: data.userId, role: data.role }, { onConflict: "user_id,role" });
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await sb
+        .from("user_roles")
+        .delete()
+        .eq("user_id", data.userId)
+        .eq("role", data.role);
+      if (error) throw new Error(error.message);
+    }
+
+    await sb.from("access_logs").insert({
+      ator: context.userId,
+      acao: data.grant ? "role.grant" : "role.revoke",
+      detalhes: { userId: data.userId, role: data.role },
+    });
+    return { ok: true };
   });
 
 /* ============ MARCOS TEMPORAIS (mandato / posse / edital) ============ */
