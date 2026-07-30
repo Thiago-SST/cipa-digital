@@ -469,6 +469,81 @@ export const getElectionResults = createServerFn({ method: "GET" })
   });
 
 /* ============ ATA ============ */
+export const generateAtaPdf = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        electionId: z.string().uuid(),
+        observacoes: z.string().trim().max(3000).optional().nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { computeElectionResults } = await import("./results.server");
+    const { buildAtaApuracaoPdf } = await import("./ata-pdf.server");
+
+    const results = await computeElectionResults(sb, data.electionId);
+    const [{ data: org }, { data: commission }] = await Promise.all([
+      sb.from("organization_settings").select("nome, cnpj, endereco").limit(1).maybeSingle(),
+      sb
+        .from("election_commission_members")
+        .select("nome, papel, matricula")
+        .eq("election_id", data.electionId)
+        .order("papel"),
+    ]);
+
+    const emitidoEm = new Date().toISOString();
+    const bytes = await buildAtaApuracaoPdf({
+      org: {
+        nome: org?.nome ?? "Organização",
+        cnpj: org?.cnpj ?? null,
+        endereco: org?.endereco ?? null,
+      },
+      election: results.election as never,
+      commission: commission ?? [],
+      stats: results.stats,
+      ranking: results.ranking.map((c) => ({
+        posicao: c.posicao,
+        nome: c.nome,
+        matricula: c.matricula,
+        numero: c.numero,
+        votos: c.votos,
+        classificacao: c.classificacao,
+      })),
+      observacoes: data.observacoes ?? null,
+      emitidoEm,
+    });
+
+    const fileName = `ata-apuracao-${emitidoEm.slice(0, 10)}.pdf`;
+    const path = `${data.electionId}/${Date.now()}-${fileName}`;
+    const { error: upErr } = await sb.storage
+      .from("election-documents")
+      .upload(path, bytes, { contentType: "application/pdf", upsert: false });
+    if (upErr) throw new Error(upErr.message);
+
+    const { error: dbErr } = await sb.from("election_documents").insert({
+      election_id: data.electionId,
+      tipo: "apuracao",
+      titulo: `Ata de Apuração — ${results.election.nome}`,
+      file_path: path,
+      file_name: fileName,
+      created_by: context.userId,
+      conteudo: { gerado_automaticamente: true, stats: results.stats },
+    });
+    if (dbErr) throw new Error(dbErr.message);
+
+    await sb.from("access_logs").insert({
+      ator: context.userId,
+      acao: "document.ata_pdf",
+      detalhes: { electionId: data.electionId },
+    });
+
+    const { data: signed } = await sb.storage.from("election-documents").createSignedUrl(path, 600);
+    return { url: signed?.signedUrl ?? null, fileName };
+  });
+
 export const saveAta = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
