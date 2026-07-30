@@ -661,14 +661,132 @@ export const updateOrgSettings = createServerFn({ method: "POST" })
 /* ============ AUDITORIA ============ */
 export const listAuditEvents = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        acao: z.string().trim().max(80).optional().nullable(),
+        ator: z.string().trim().max(120).optional().nullable(),
+        desde: z.string().optional().nullable(),
+        ate: z.string().optional().nullable(),
+        page: z.number().int().min(0).max(500).optional(),
+        pageSize: z.number().int().min(10).max(200).optional(),
+      })
+      .parse(d ?? {}),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const page = data.page ?? 0;
+    const pageSize = data.pageSize ?? 50;
+
+    let query = sb.from("access_logs").select("*", { count: "exact" });
+    if (data.acao) query = query.ilike("acao", `${data.acao}%`);
+    if (data.ator) query = query.ilike("ator", `%${data.ator}%`);
+    if (data.desde) query = query.gte("created_at", new Date(data.desde).toISOString());
+    if (data.ate) query = query.lte("created_at", new Date(`${data.ate.slice(0, 10)}T23:59:59`).toISOString());
+
+    const { data: rows, count } = await query
+      .order("created_at", { ascending: false })
+      .range(page * pageSize, page * pageSize + pageSize - 1);
+
+    return { rows: rows ?? [], total: count ?? 0, page, pageSize };
+  });
+
+export const exportAuditCsv = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        acao: z.string().trim().max(80).optional().nullable(),
+        ator: z.string().trim().max(120).optional().nullable(),
+        desde: z.string().optional().nullable(),
+        ate: z.string().optional().nullable(),
+      })
+      .parse(d ?? {}),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    let query = sb.from("access_logs").select("created_at, ator, acao, ip, detalhes");
+    if (data.acao) query = query.ilike("acao", `${data.acao}%`);
+    if (data.ator) query = query.ilike("ator", `%${data.ator}%`);
+    if (data.desde) query = query.gte("created_at", new Date(data.desde).toISOString());
+    if (data.ate) query = query.lte("created_at", new Date(`${data.ate.slice(0, 10)}T23:59:59`).toISOString());
+    const { data: rows } = await query.order("created_at", { ascending: false }).limit(5000);
+    const csv = toCsv(
+      (rows ?? []).map((r) => ({
+        data: r.created_at,
+        ator: r.ator ?? "",
+        acao: r.acao,
+        ip: r.ip ?? "",
+        detalhes: r.detalhes ? JSON.stringify(r.detalhes) : "",
+      })),
+    );
+    return { filename: `auditoria-${new Date().toISOString().slice(0, 10)}.csv`, csv };
+  });
+
+/* ============ USUÁRIOS / PAPÉIS ============ */
+export const listAdminUsers = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const sb = await ensureAdmin(context.userId);
-    const { data } = await sb
-      .from("access_logs")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200);
-    return data ?? [];
+    const { data: roles } = await sb.from("user_roles").select("id, user_id, role, created_at");
+    const { data: usersPage } = await sb.auth.admin.listUsers({ page: 1, perPage: 200 });
+    const emailById = new Map((usersPage?.users ?? []).map((u) => [u.id, u.email ?? ""]));
+    return (usersPage?.users ?? []).map((u) => ({
+      userId: u.id,
+      email: u.email ?? "",
+      createdAt: u.created_at,
+      lastSignInAt: u.last_sign_in_at ?? null,
+      roles: (roles ?? []).filter((r) => r.user_id === u.id).map((r) => r.role as string),
+      isSelf: u.id === context.userId,
+      _email: emailById.get(u.id),
+    }));
+  });
+
+export const setUserRole = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        userId: z.string().uuid(),
+        role: z.enum(["admin", "organizador"]),
+        grant: z.boolean(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+
+    if (!data.grant && data.role === "admin") {
+      if (data.userId === context.userId) {
+        throw new Error("Você não pode remover o seu próprio acesso de administrador.");
+      }
+      const { count } = await sb
+        .from("user_roles")
+        .select("id", { count: "exact", head: true })
+        .eq("role", "admin");
+      if ((count ?? 0) <= 1) throw new Error("É necessário manter ao menos um administrador.");
+    }
+
+    if (data.grant) {
+      const { error } = await sb
+        .from("user_roles")
+        .upsert({ user_id: data.userId, role: data.role }, { onConflict: "user_id,role" });
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await sb
+        .from("user_roles")
+        .delete()
+        .eq("user_id", data.userId)
+        .eq("role", data.role);
+      if (error) throw new Error(error.message);
+    }
+
+    await sb.from("access_logs").insert({
+      ator: context.userId,
+      acao: data.grant ? "role.grant" : "role.revoke",
+      detalhes: { userId: data.userId, role: data.role },
+    });
+    return { ok: true };
   });
 
 /* ============ MARCOS TEMPORAIS (mandato / posse / edital) ============ */
