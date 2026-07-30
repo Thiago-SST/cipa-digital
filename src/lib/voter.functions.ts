@@ -153,11 +153,14 @@ export const getVoterBallot = createServerFn({ method: "GET" }).handler(async ()
       .maybeSingle(),
   ]);
 
+  const { withPhotoUrls } = await import("./photos.server");
+  const candidatesWithPhotos = await withPhotoUrls(supabaseAdmin, candidates ?? []);
+
   return {
     authenticated: true as const,
     voter: { nome: session.data.nome!, matricula: session.data.matricula! },
     election,
-    candidates: candidates ?? [],
+    candidates: candidatesWithPhotos,
     hasVoted: !!token,
     votedAt: token?.voted_at ?? null,
   };

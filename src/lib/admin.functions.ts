@@ -195,7 +195,8 @@ export const listCandidates = createServerFn({ method: "GET" })
       .select("*")
       .eq("election_id", data.electionId)
       .order("numero", { ascending: true, nullsFirst: false });
-    return list ?? [];
+    const { withPhotoUrls } = await import("./photos.server");
+    return withPhotoUrls(sb, list ?? []);
   });
 
 export const upsertCandidate = createServerFn({ method: "POST" })
@@ -219,6 +220,57 @@ export const deleteCandidate = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sb = await ensureAdmin(context.userId);
     const { error } = await sb.from("candidates").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const uploadCandidatePhoto = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        candidateId: z.string().uuid(),
+        fileName: z.string().trim().min(1).max(200),
+        fileBase64: z.string().min(10),
+        mimeType: z.string().trim().min(3).max(120),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { uploadCandidatePhotoFile, resolvePhotoUrl } = await import("./photos.server");
+    const { data: current } = await sb
+      .from("candidates")
+      .select("foto_url")
+      .eq("id", data.candidateId)
+      .maybeSingle();
+    const path = await uploadCandidatePhotoFile(sb, {
+      candidateId: data.candidateId,
+      fileName: data.fileName,
+      fileBase64: data.fileBase64,
+      mimeType: data.mimeType,
+      previousPath: current?.foto_url ?? null,
+    });
+    const { error } = await sb.from("candidates").update({ foto_url: path }).eq("id", data.candidateId);
+    if (error) throw new Error(error.message);
+    return { path, url: await resolvePhotoUrl(sb, path) };
+  });
+
+export const removeCandidatePhoto = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ candidateId: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+    const { isStoragePath, CANDIDATE_PHOTO_BUCKET } = await import("./photos.server");
+    const { data: current } = await sb
+      .from("candidates")
+      .select("foto_url")
+      .eq("id", data.candidateId)
+      .maybeSingle();
+    if (isStoragePath(current?.foto_url)) {
+      await sb.storage.from(CANDIDATE_PHOTO_BUCKET).remove([current!.foto_url as string]);
+    }
+    const { error } = await sb.from("candidates").update({ foto_url: null }).eq("id", data.candidateId);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
