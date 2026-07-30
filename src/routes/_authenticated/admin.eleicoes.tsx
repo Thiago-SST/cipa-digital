@@ -2,11 +2,20 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Vote, Calendar, Pencil } from "lucide-react";
+import { Plus, Vote, Calendar, Pencil, Trash2 } from "lucide-react";
 
-import { listElections, upsertElection } from "@/lib/admin.functions";
+import { listElections, upsertElection, deleteElection } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/eleicoes")({
+  head: () => ({
+    meta: [
+      { title: "Eleições da CIPA — Painel de gestão" },
+      {
+        name: "description",
+        content: "Crie, edite e acompanhe os ciclos eleitorais da CIPA conforme a NR-5.",
+      },
+    ],
+  }),
   component: ElectionsPage,
 });
 
@@ -61,8 +70,10 @@ const STATUS_TONE: Record<string, string> = {
 function ElectionsPage() {
   const list = useServerFn(listElections);
   const upsert = useServerFn(upsertElection);
+  const remove = useServerFn(deleteElection);
   const qc = useQueryClient();
   const [editing, setEditing] = useState<ElectionFormValues | null>(null);
+  const [confirming, setConfirming] = useState<ElectionRow | null>(null);
 
   const q = useQuery({ queryKey: ["admin-elections"], queryFn: () => list() });
 
@@ -71,6 +82,14 @@ function ElectionsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-elections"] });
       setEditing(null);
+    },
+  });
+
+  const del = useMutation({
+    mutationFn: (id: string) => remove({ data: { id } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-elections"] });
+      setConfirming(null);
     },
   });
 
@@ -141,6 +160,16 @@ function ElectionsPage() {
                 >
                   <Pencil className="h-3.5 w-3.5" /> Editar
                 </button>
+                <button
+                  onClick={() => {
+                    del.reset();
+                    setConfirming(e as ElectionRow);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md border border-destructive/40 px-2.5 py-1.5 text-xs text-destructive hover:bg-destructive/10"
+                  title="Excluir"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Excluir
+                </button>
               </div>
             </li>
           ))}
@@ -155,6 +184,37 @@ function ElectionsPage() {
           pending={m.isPending}
           error={m.error as Error | null}
         />
+      )}
+
+      {confirming && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/40 p-4">
+          <div className="w-full max-w-md space-y-4 rounded-lg border border-border bg-card p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">Excluir eleição</h2>
+            <p className="text-sm text-muted-foreground">
+              Isso remove definitivamente <strong className="text-foreground">{confirming.nome}</strong>, seus
+              candidatos, avisos, comissão e documentos. Eleições que já receberam votos não podem ser excluídas —
+              nesse caso, use o arquivamento.
+            </p>
+            {del.error && <p className="text-sm text-destructive">{(del.error as Error).message}</p>}
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirming(null)}
+                className="rounded-md border border-border px-4 py-2 text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={del.isPending}
+                onClick={() => del.mutate(confirming.id)}
+                className="rounded-md bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground hover:bg-destructive/90 disabled:opacity-60"
+              >
+                {del.isPending ? "Excluindo..." : "Excluir definitivamente"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
