@@ -164,6 +164,7 @@ export const setElectionStatus = createServerFn({ method: "POST" })
 
 export const getElection = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
     const sb = await ensureAdmin(context.userId);
