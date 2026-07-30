@@ -164,13 +164,52 @@ export const setElectionStatus = createServerFn({ method: "POST" })
 
 export const getElection = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
     const sb = await ensureAdmin(context.userId);
     const { data: el } = await sb.from("elections").select("*").eq("id", data.id).maybeSingle();
     if (!el) throw new Error("Eleição não encontrada.");
     return el;
+  });
+
+export const deleteElection = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+
+    const [{ count: votes }, { count: tokens }] = await Promise.all([
+      sb.from("votes").select("id", { count: "exact", head: true }).eq("election_id", data.id),
+      sb.from("vote_tokens").select("id", { count: "exact", head: true }).eq("election_id", data.id),
+    ]);
+    if ((votes ?? 0) > 0 || (tokens ?? 0) > 0) {
+      throw new Error(
+        "Esta eleição já possui votos registrados e não pode ser excluída. Use o arquivamento para preservar a auditoria.",
+      );
+    }
+
+    const { data: docs } = await sb
+      .from("election_documents")
+      .select("file_path")
+      .eq("election_id", data.id);
+    const paths = (docs ?? []).map((d) => d.file_path).filter((p): p is string => !!p);
+    if (paths.length) await sb.storage.from("election-documents").remove(paths);
+
+    await sb.from("candidate_challenges").delete().eq("election_id", data.id);
+    await sb.from("election_notices").delete().eq("election_id", data.id);
+    await sb.from("election_commission_members").delete().eq("election_id", data.id);
+    await sb.from("election_documents").delete().eq("election_id", data.id);
+    await sb.from("candidates").delete().eq("election_id", data.id);
+
+    const { error } = await sb.from("elections").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+
+    await sb.from("access_logs").insert({
+      ator: context.userId,
+      acao: "election.delete",
+      detalhes: { electionId: data.id },
+    });
+    return { ok: true };
   });
 
 /* ============ CANDIDATOS ============ */
