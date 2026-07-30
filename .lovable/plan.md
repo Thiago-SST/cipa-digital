@@ -1,32 +1,40 @@
-## Objetivo
-Corrigir o erro "Sessão expirada" ao votar, causado pelo cookie de sessão do eleitor não ser enviado em contexto de iframe (preview) e potencialmente em navegações cross-site.
+## Situação atual (verificada no código)
 
-## Causa raiz
-`src/lib/voter-session.server.ts` cria o cookie com `sameSite: "lax"`. Dentro do iframe do preview Lovable, o cookie é tratado como third-party e bloqueado a partir da segunda requisição. O login "funciona" (Set-Cookie chega), mas as chamadas seguintes (`getVoterBallot`, `castVote`) não enviam o cookie → o servidor retorna `authenticated: false` / lança "Sessão expirada".
+Já entregue e funcional:
+- Fluxo do eleitor completo (login por matrícula/CPF + data de nascimento, cédula, voto nominal/branco/nulo, voto único por `vote_tokens`, anonimato).
+- Painel admin: eleições (criar/editar/status/homologar/arquivar), candidatos (CRUD, número, aprovação), empregados (CRUD + importação CSV), comissão eleitoral, impugnações, avisos oficiais.
+- Apuração com ranking e desempate NR-5, aba "Acompanhar" ao vivo, ata estruturada, documentos (upload de PDF no storage), exportações CSV, auditoria e configurações da organização.
 
-## Mudanças
+## O que ainda falta do escopo inicial
 
-### 1. `src/lib/voter-session.server.ts`
-- Trocar `sameSite: "lax"` por `sameSite: "none"`.
-- Manter `secure: true` (obrigatório com `sameSite: "none"`) e `httpOnly: true`.
-- Nenhuma outra alteração de shape/API.
+1. **Foto do candidato** — existe o campo `foto_url`, exibido na cédula, mas não há upload de imagem em lugar nenhum. Hoje só dá para colar uma URL.
+2. **Exclusão de eleição** — só existe arquivar; não há exclusão real (nem com proteção contra apagar eleição com votos).
+3. **Geração de PDF das atas/relatórios** — a ata é salva como registro estruturado e os PDFs são enviados manualmente. Falta gerar o documento pronto (ata de apuração / resultado) para impressão e arquivo.
+4. **Auditoria sem filtros** — a tela mostra os últimos 200 eventos sem busca, filtro por ação/período ou paginação.
+5. **Notificações por email** — nada é disparado pela aplicação (só o email nativo de recuperação de senha).
+6. **Perfil / gestão de organizadores** — não há tela para trocar a própria senha dentro do painel nem para conceder/remover o papel de organizador a outros usuários.
 
-Efeito: o cookie passa a ser enviado em iframes cross-site (preview) e em navegações top-level normais no site publicado. `httpOnly` + `secure` continuam protegendo contra XSS/interceptação; a proteção contra CSRF é dada pelo fato de que todas as ações críticas (`castVote`, `registerCandidacy`) são server functions do próprio domínio invocadas via fetch same-origin com validação de entrada por Zod e verificações de janela/eleição no handler.
+## Proposta de próxima etapa (Fase 6 — fechamento do escopo)
 
-### 2. Verificação
-Após o build, testar o fluxo:
-1. `/votar` → login com matrícula/data → deve navegar para `/votar/cedula` mostrando a cédula (não "sessão expirada").
-2. Selecionar candidato → Confirmar voto → deve chegar em `/votar/confirmado`.
+Sugiro fechar primeiro os itens que travam o uso real do sistema, nesta ordem:
 
-Se o problema persistir após a mudança, investigar via Playwright headless no localhost para descartar bug adicional em `getVoterSession()` (ex.: `SESSION_SECRET` ausente em runtime).
+**Bloco A — Documentos oficiais e candidatos**
+- Upload de foto do candidato: novo bucket público de fotos, upload no formulário de candidato (admin) e na auto-candidatura, com preview e substituição.
+- Geração de PDF da Ata de Apuração e do Relatório de Resultado, com cabeçalho da organização, comissão eleitoral, totais (nominais, brancos, nulos), ranking com titulares e suplentes e espaço de assinaturas. O PDF gerado fica salvo junto aos documentos da eleição.
 
-## Fora de escopo
-- Alterar autenticação do admin (Supabase Auth).
-- Reescrever storage de sessão (manter `useSession` do TanStack Start).
-- Alterar RLS, migrations ou schema.
+**Bloco B — Administração**
+- Exclusão de eleição com confirmação, bloqueada quando já houver votos registrados (nesse caso só arquivar).
+- Auditoria com filtros (período, tipo de ação, busca por ator) e paginação, além de exportação CSV dos logs.
+- Tela de perfil: trocar a própria senha e gerenciar quem é administrador/organizador.
+
+**Bloco C — Notificações por email (opcional, precisa de decisão)**
+- Emails automáticos em marcos do processo (publicação do edital, homologação de inscrições, abertura da votação, resultado). Requer definir o remetente e domínio de envio.
 
 ## Detalhes técnicos
-`sameSite: "none"` + `secure: true` é o padrão recomendado quando o app pode ser embutido em iframe (preview) e quando cookies de sessão precisam sobreviver a redirecionamentos entre origens. É seguro aqui porque:
-- Cookie é `httpOnly` (JS não lê).
-- Só transmitido em HTTPS.
-- As mutations sensíveis validam a eleição/janela e usam UNIQUE em `vote_tokens` para impedir voto duplicado, então CSRF não permite votar sem antes ter autenticado como o próprio empregado.
+
+- Fotos: novo bucket de storage com leitura pública e escrita restrita; server functions de upload em `src/lib/admin.functions.ts` e `src/lib/voter.functions.ts` (auto-candidatura), no mesmo padrão de `uploadElectionDocument`.
+- PDF: geração no servidor com biblioteca compatível com o runtime edge (pdf-lib), salvando o arquivo no bucket `election-documents` e registrando em `election_documents`.
+- Exclusão de eleição: nova server function com verificação de votos e registro em `access_logs`.
+- Perfil/organizadores: leitura e escrita em `user_roles` restritas a admin, e troca de senha via auth do usuário logado.
+
+Posso começar pelo Bloco A, ou prefere outra ordem?
