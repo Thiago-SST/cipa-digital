@@ -11,6 +11,8 @@ import {
   listCandidates,
   upsertCandidate,
   deleteCandidate,
+  uploadCandidatePhoto,
+  removeCandidatePhoto,
   getElectionResults,
   saveAta,
   upsertElection,
