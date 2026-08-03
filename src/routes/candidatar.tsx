@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, ClipboardEdit, LogIn } from "lucide-react";
 
 import { VoterShell } from "@/components/voter-shell";
@@ -10,6 +10,7 @@ import {
   registerCandidacy,
   voterLogin,
   voterLogout,
+  uploadMyCandidacyPhoto,
 } from "@/lib/voter.functions";
 
 export const Route = createFileRoute("/candidatar")({
@@ -172,6 +173,11 @@ function CandidacyForm({ data, onDone }: { data: CandidacyState; onDone: () => v
             <div className="text-xs text-muted-foreground">Sua proposta</div>
             <p className="mt-1 text-foreground">{data.candidacy.proposta}</p>
           </div>
+          <CandidacyPhotoUploader
+            nome={data.voter.nome}
+            url={data.candidacy.foto_display_url}
+            onDone={onDone}
+          />
           <button
             onClick={async () => {
               await logout();
