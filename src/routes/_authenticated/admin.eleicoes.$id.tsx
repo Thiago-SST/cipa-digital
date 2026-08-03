@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { PhotoPicker } from "@/components/photo-picker";
 import { ArrowLeft, Play, Plus, Trash2, Printer, Award, AlertTriangle, CheckCircle2, Users, Gavel, Megaphone, ListChecks, Archive, Activity, RefreshCw, Pause } from "lucide-react";
 
 import {
@@ -1143,43 +1144,16 @@ function CandidatePhotoCell({
   onSelect: (file: File) => void;
   onRemove: () => void;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
   return (
-    <div className="flex items-center gap-2">
-      {url ? (
-        <img src={url} alt={`Foto de ${nome}`} className="h-10 w-10 rounded-full object-cover" />
-      ) : (
-        <span className="grid h-10 w-10 place-items-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
-          {nome.slice(0, 2).toUpperCase()}
-        </span>
-      )}
-      <div className="flex flex-col gap-0.5">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => inputRef.current?.click()}
-          className="text-[11px] text-primary hover:underline disabled:opacity-60"
-        >
-          {busy ? "Enviando..." : url ? "Trocar" : "Enviar foto"}
-        </button>
-        {url && !busy && (
-          <button type="button" onClick={onRemove} className="text-[11px] text-destructive hover:underline">
-            Remover
-          </button>
-        )}
-      </div>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          if (file) onSelect(file);
-        }}
-      />
-    </div>
+    <PhotoPicker
+      nome={nome}
+      currentUrl={url}
+      size={40}
+      busy={busy}
+      triggerLabel={url ? "Trocar" : "Enviar foto"}
+      onConfirm={onSelect}
+      onRemove={onRemove}
+    />
   );
 }
 

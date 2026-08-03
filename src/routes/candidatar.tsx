@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, ClipboardEdit, LogIn } from "lucide-react";
 
 import { VoterShell } from "@/components/voter-shell";
+import { PhotoPicker } from "@/components/photo-picker";
 import {
   getMyCandidacy,
   registerCandidacy,
@@ -128,7 +129,6 @@ function CandidacyPhotoUploader({
   onDone: () => void;
 }) {
   const upload = useServerFn(uploadMyCandidacyPhoto);
-  const inputRef = useRef<HTMLInputElement>(null);
   const m = useMutation({
     mutationFn: async (file: File) => {
       const { fileToBase64 } = await import("@/lib/file-to-base64");
@@ -142,36 +142,16 @@ function CandidacyPhotoUploader({
   return (
     <div className="mt-4 rounded-md border border-border p-3">
       <div className="text-xs text-muted-foreground">Foto da cédula</div>
-      <div className="mt-2 flex items-center gap-3">
-        {url ? (
-          <img src={url} alt={`Foto de ${nome}`} className="h-14 w-14 rounded-full object-cover" />
-        ) : (
-          <span className="grid h-14 w-14 place-items-center rounded-full bg-muted text-sm font-semibold text-muted-foreground">
-            {nome.slice(0, 2).toUpperCase()}
-          </span>
-        )}
-        <button
-          type="button"
-          disabled={m.isPending}
-          onClick={() => inputRef.current?.click()}
-          className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
-        >
-          {m.isPending ? "Enviando..." : url ? "Trocar foto" : "Enviar foto"}
-        </button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (file) m.mutate(file);
-          }}
+      <div className="mt-2">
+        <PhotoPicker
+          nome={nome}
+          currentUrl={url}
+          size={56}
+          busy={m.isPending}
+          serverError={m.isError ? (m.error as Error).message : null}
+          onConfirm={(file) => m.mutate(file)}
         />
       </div>
-      <p className="mt-2 text-[11px] text-muted-foreground">JPG, PNG ou WEBP, até 3 MB.</p>
-      {m.isError && <p className="mt-2 text-xs text-destructive">{(m.error as Error).message}</p>}
     </div>
   );
 }

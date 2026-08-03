@@ -33,8 +33,15 @@ export async function withPhotoUrls<T extends { foto_url?: string | null }>(
   );
 }
 
-const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
-const ALLOWED_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+import {
+  ALLOWED_PHOTO_TYPES,
+  MAX_PHOTO_BYTES,
+  MAX_PHOTO_LABEL,
+  formatBytes,
+  sniffImageType,
+  validatePhotoFile,
+  type AllowedPhotoType,
+} from "./photo-validation";
 
 export async function uploadCandidatePhotoFile(
   sb: AnySupabase,
@@ -46,18 +53,37 @@ export async function uploadCandidatePhotoFile(
     previousPath?: string | null;
   },
 ): Promise<string> {
-  if (!ALLOWED_PHOTO_TYPES.includes(params.mimeType)) {
-    throw new Error("Formato inválido. Envie uma imagem JPG, PNG ou WEBP.");
+  if (!ALLOWED_PHOTO_TYPES.includes(params.mimeType as AllowedPhotoType)) {
+    throw new Error("Formato não permitido. Envie uma imagem JPG, PNG ou WEBP.");
   }
-  const bytes = Uint8Array.from(atob(params.fileBase64), (c) => c.charCodeAt(0));
+  let bytes: Uint8Array;
+  try {
+    bytes = Uint8Array.from(atob(params.fileBase64), (c) => c.charCodeAt(0));
+  } catch {
+    throw new Error("Não foi possível ler o arquivo enviado. Tente novamente.");
+  }
+  const invalid = validatePhotoFile({
+    name: params.fileName,
+    type: params.mimeType,
+    size: bytes.byteLength,
+  });
+  if (invalid) throw new Error(invalid);
   if (bytes.byteLength > MAX_PHOTO_BYTES) {
-    throw new Error("Imagem muito grande. O limite é 3 MB.");
+    throw new Error(
+      `Imagem muito grande (${formatBytes(bytes.byteLength)}). O limite é ${MAX_PHOTO_LABEL}.`,
+    );
   }
-  const ext = params.mimeType === "image/png" ? "png" : params.mimeType === "image/webp" ? "webp" : "jpg";
+  const sniffed = sniffImageType(bytes);
+  if (!sniffed || sniffed !== params.mimeType) {
+    throw new Error(
+      "O conteúdo do arquivo não corresponde a uma imagem JPG, PNG ou WEBP válida. Envio bloqueado por segurança.",
+    );
+  }
+  const ext = sniffed === "image/png" ? "png" : sniffed === "image/webp" ? "webp" : "jpg";
   const path = `${params.candidateId}/${Date.now()}.${ext}`;
   const { error } = await sb.storage
     .from(CANDIDATE_PHOTO_BUCKET)
-    .upload(path, bytes, { contentType: params.mimeType, upsert: false });
+    .upload(path, bytes, { contentType: sniffed, upsert: false });
   if (error) throw new Error(error.message);
 
   if (isStoragePath(params.previousPath)) {
