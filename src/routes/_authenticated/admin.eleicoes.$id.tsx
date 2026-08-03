@@ -1017,6 +1017,8 @@ function CandidatesTab({ electionId }: { electionId: string }) {
   const fnList = useServerFn(listCandidates);
   const fnUpsert = useServerFn(upsertCandidate);
   const fnDelete = useServerFn(deleteCandidate);
+  const fnUploadPhoto = useServerFn(uploadCandidatePhoto);
+  const fnRemovePhoto = useServerFn(removeCandidatePhoto);
   const qc = useQueryClient();
 
   const q = useQuery({ queryKey: ["admin-candidates", electionId], queryFn: () => fnList({ data: { electionId } }) });
@@ -1029,6 +1031,24 @@ function CandidatesTab({ electionId }: { electionId: string }) {
     onSuccess: invalidate,
   });
   const mDelete = useMutation({ mutationFn: (id: string) => fnDelete({ data: { id } }), onSuccess: invalidate });
+  const mPhoto = useMutation({
+    mutationFn: async (v: { candidateId: string; file: File }) => {
+      const { fileToBase64 } = await import("@/lib/file-to-base64");
+      return fnUploadPhoto({
+        data: {
+          candidateId: v.candidateId,
+          fileName: v.file.name,
+          mimeType: v.file.type,
+          fileBase64: await fileToBase64(v.file),
+        },
+      });
+    },
+    onSuccess: invalidate,
+  });
+  const mRemovePhoto = useMutation({
+    mutationFn: (candidateId: string) => fnRemovePhoto({ data: { candidateId } }),
+    onSuccess: invalidate,
+  });
 
   const [open, setOpen] = useState(false);
 
@@ -1039,6 +1059,7 @@ function CandidatesTab({ electionId }: { electionId: string }) {
           <Plus className="h-3.5 w-3.5" /> Novo candidato
         </button>
       </div>
+      {mPhoto.error && <p className="text-sm text-destructive">{(mPhoto.error as Error).message}</p>}
       {q.isLoading ? (
         <p className="text-sm text-muted-foreground">Carregando...</p>
       ) : !q.data?.length ? (
@@ -1047,13 +1068,25 @@ function CandidatesTab({ electionId }: { electionId: string }) {
         <table className="w-full text-sm">
           <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
-              <th className="py-2">Nº</th><th>Nome</th><th>Setor</th><th>Status</th><th />
+              <th className="py-2">Nº</th><th>Foto</th><th>Nome</th><th>Setor</th><th>Status</th><th />
             </tr>
           </thead>
           <tbody>
             {q.data.map((c) => (
               <tr key={c.id} className="border-b border-border/50">
                 <td className="py-2 font-mono">{c.numero ?? "—"}</td>
+                <td className="py-2">
+                  <CandidatePhotoCell
+                    nome={c.nome}
+                    url={c.foto_display_url}
+                    busy={
+                      (mPhoto.isPending && mPhoto.variables?.candidateId === c.id) ||
+                      (mRemovePhoto.isPending && mRemovePhoto.variables === c.id)
+                    }
+                    onSelect={(file) => mPhoto.mutate({ candidateId: c.id, file })}
+                    onRemove={() => mRemovePhoto.mutate(c.id)}
+                  />
+                </td>
                 <td>
                   <div className="font-medium">{c.nome}</div>
                   <div className="text-xs text-muted-foreground">mat. {c.matricula}</div>
