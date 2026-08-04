@@ -209,8 +209,41 @@ export async function buildAtaApuracaoPdf(input: AtaPdfInput): Promise<Uint8Arra
   }
   y -= 10;
 
+  // Empates e criterio de desempate
+  const empates = input.empates ?? [];
+  let secao = 4;
+  if (empates.length > 0) {
+    text(`${secao}. EMPATES E CRITERIO DE DESEMPATE`, { size: 11, bold: true, gap: 16 });
+    wrapped(
+      "Havendo empate no numero de votos, a classificacao observou, nesta ordem: maior tempo de casa (data de admissao mais antiga), inscricao mais antiga e menor numero de cedula.",
+    );
+    y -= 4;
+    for (const e of empates) {
+      text(`Empate com ${e.votos} voto(s) — criterio aplicado: ${stripAccents(e.criterioLabel)}`, {
+        size: 10,
+        bold: true,
+        gap: LINE,
+      });
+      for (const c of e.candidatos) {
+        text(
+          `- ${c.posicao}o ${c.nome} (matricula ${c.matricula}) — admissao: ${fmtDay(c.data_admissao)}`,
+          { size: 10, gap: LINE },
+        );
+      }
+      if (e.semAdmissao.length > 0) {
+        wrapped(
+          `Observacao: sem data de admissao cadastrada para ${e.semAdmissao.join(", ")}; o desempate recaiu no criterio seguinte.`,
+          9,
+        );
+      }
+      y -= 4;
+    }
+    y -= 6;
+    secao += 1;
+  }
+
   if (input.observacoes) {
-    text("4. OBSERVACOES", { size: 11, bold: true, gap: 16 });
+    text(`${secao}. OBSERVACOES`, { size: 11, bold: true, gap: 16 });
     wrapped(input.observacoes);
     y -= 6;
   }
