@@ -441,6 +441,7 @@ export const generateAtaPdf = createServerFn({ method: "POST" })
         votos: c.votos,
         classificacao: c.classificacao,
       })),
+      empates: results.empates,
       observacoes: data.observacoes ?? null,
       emitidoEm,
     });
