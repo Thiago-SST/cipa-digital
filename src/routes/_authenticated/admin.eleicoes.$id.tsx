@@ -1267,6 +1267,36 @@ function ResultsTab({ electionId }: { electionId: string }) {
         <ResultsTable rows={r.ranking} showClass />
       </Section>
 
+      {r.empates.length > 0 && (
+        <Section title="Empates e critério de desempate">
+          <p className="text-xs text-muted-foreground">
+            Ordem aplicada: mais votos → maior tempo de casa (admissão mais antiga) → inscrição mais antiga → menor número de cédula.
+          </p>
+          <ul className="mt-3 space-y-3">
+            {r.empates.map((e) => (
+              <li key={e.votos} className="rounded-md border border-border bg-muted/40 p-3">
+                <p className="text-sm font-semibold">
+                  {e.votos} voto(s) — resolvido por {e.criterioLabel}
+                </p>
+                <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                  {e.candidatos.map((c) => (
+                    <li key={c.matricula}>
+                      {c.posicao}º {c.nome} ({c.matricula}) — admissão: {c.data_admissao ?? "não informada"}
+                    </li>
+                  ))}
+                </ul>
+                {e.semAdmissao.length > 0 && (
+                  <p className="mt-2 flex items-center gap-1.5 text-xs text-destructive">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Sem data de admissão para {e.semAdmissao.join(", ")} — cadastre em Empregados para que o desempate use o tempo de casa.
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
       <button
         onClick={() => window.print()}
         className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted"
