@@ -393,84 +393,8 @@ export const getElectionResults = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ electionId: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
     const sb = await ensureAdmin(context.userId);
-    const [{ data: el }, { data: candidates }, { data: votes }, { count: tokenCount }, { count: eligible }] =
-      await Promise.all([
-        sb
-          .from("elections")
-          .select("id, nome, vagas_titulares, vagas_suplentes, status")
-          .eq("id", data.electionId)
-          .single(),
-        sb
-          .from("candidates")
-          .select("id, nome, matricula, setor, cargo, numero, status, created_at")
-          .eq("election_id", data.electionId)
-          .eq("status", "approved"),
-        sb.from("votes").select("candidate_id, tipo").eq("election_id", data.electionId),
-        sb
-          .from("vote_tokens")
-          .select("id", { count: "exact", head: true })
-          .eq("election_id", data.electionId),
-        sb.from("employees").select("id", { count: "exact", head: true }).eq("ativo", true),
-      ]);
-
-    const tally = new Map<string, number>();
-    let votosNominais = 0;
-    let votosBrancos = 0;
-    let votosNulos = 0;
-    (votes ?? []).forEach((v) => {
-      if (v.tipo === "branco") votosBrancos += 1;
-      else if (v.tipo === "nulo") votosNulos += 1;
-      else if (v.candidate_id) {
-        votosNominais += 1;
-        tally.set(v.candidate_id, (tally.get(v.candidate_id) ?? 0) + 1);
-      }
-    });
-
-    const vagasTit = el!.vagas_titulares;
-    const vagasSup = el!.vagas_suplentes;
-
-    // Ranking: 1) mais votos, 2) inscrição mais antiga (NR-5 — proxy de tempo na empresa),
-    // 3) menor número de cédula
-    const ordered = (candidates ?? [])
-      .map((c) => ({ ...c, votos: tally.get(c.id) ?? 0 }))
-      .sort(
-        (a, b) =>
-          b.votos - a.votos ||
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime() ||
-          (a.numero ?? 9999) - (b.numero ?? 9999),
-      );
-
-    const ranking = ordered.map((c, i) => {
-      const posicao = i + 1;
-      const classificacao: "titular" | "suplente" | "nao_eleito" =
-        posicao <= vagasTit
-          ? "titular"
-          : posicao <= vagasTit + vagasSup
-            ? "suplente"
-            : "nao_eleito";
-      return { ...c, posicao, classificacao };
-    });
-
-    const titulares = ranking.filter((c) => c.classificacao === "titular");
-    const suplentes = ranking.filter((c) => c.classificacao === "suplente");
-
-    return {
-      election: el!,
-      ranking,
-      titulares,
-      suplentes,
-      stats: {
-        totalVotos: votes?.length ?? 0,
-        votosNominais,
-        votosBrancos,
-        votosNulos,
-        eleitoresQueVotaram: tokenCount ?? 0,
-        eleitoresAptos: eligible ?? 0,
-        vagasTitulares: vagasTit,
-        vagasSuplentes: vagasSup,
-        candidatosAprovados: ranking.length,
-      },
-    };
+    const { computeElectionResults } = await import("./results.server");
+    return computeElectionResults(sb, data.electionId);
   });
 
 /* ============ ATA ============ */
