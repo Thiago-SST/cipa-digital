@@ -64,6 +64,10 @@ function fmtDay(value?: string | null): string {
   return y && m && d ? `${d}/${m}/${y}` : "—";
 }
 
+function stripAccents(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 const CLASSIF_LABEL: Record<string, string> = {
   titular: "Titular",
   suplente: "Suplente",
