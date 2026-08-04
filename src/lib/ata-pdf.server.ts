@@ -32,6 +32,17 @@ export type AtaPdfInput = {
     votos: number;
     classificacao: "titular" | "suplente" | "nao_eleito";
   }>;
+  empates?: Array<{
+    votos: number;
+    criterioLabel: string;
+    semAdmissao: string[];
+    candidatos: Array<{
+      posicao: number;
+      nome: string;
+      matricula: string;
+      data_admissao: string | null;
+    }>;
+  }>;
   observacoes?: string | null;
   emitidoEm: string;
 };
