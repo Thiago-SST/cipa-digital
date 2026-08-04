@@ -325,6 +325,11 @@ const employeeSchema = z.object({
   setor: z.string().trim().max(80).optional().nullable(),
   cargo: z.string().trim().max(80).optional().nullable(),
   data_nascimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  data_admissao: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .nullable(),
   ativo: z.boolean().optional(),
 });
 
