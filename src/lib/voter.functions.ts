@@ -339,14 +339,24 @@ export const uploadMyCandidacyPhoto = createServerFn({ method: "POST" })
     const session = await getVoterSession();
     if (!session.data.employeeId) throw new Error("Faça login para enviar a foto.");
 
+    const { data: election } = await supabaseAdmin
+      .from("elections")
+      .select("id")
+      .in("status", ["registration"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!election) throw new Error("Não há eleição com inscrições abertas.");
+
     const { data: cand } = await supabaseAdmin
       .from("candidates")
       .select("id, foto_url")
+      .eq("election_id", election.id)
       .eq("employee_id", session.data.employeeId)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (!cand) throw new Error("Você ainda não possui uma inscrição.");
+    if (!cand) throw new Error("Você ainda não possui uma inscrição nesta eleição.");
 
     const path = await uploadCandidatePhotoFile(supabaseAdmin, {
       candidateId: cand.id,

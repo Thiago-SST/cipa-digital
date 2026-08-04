@@ -19,6 +19,7 @@ type EmpInput = {
   setor: string | null;
   cargo: string | null;
   data_nascimento: string;
+  data_admissao?: string | null;
   ativo?: boolean;
 };
 
@@ -65,14 +66,14 @@ function EmployeesPage() {
           <button onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted">
             <Upload className="h-3.5 w-3.5" /> Importar CSV
           </button>
-          <button onClick={() => setEditing({ matricula: "", nome: "", cpf: "", email: "", setor: "", cargo: "", data_nascimento: "", ativo: true })} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
+          <button onClick={() => setEditing({ matricula: "", nome: "", cpf: "", email: "", setor: "", cargo: "", data_nascimento: "", data_admissao: "", ativo: true })} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
             <Plus className="h-3.5 w-3.5" /> Novo
           </button>
         </div>
       </header>
 
       <p className="text-xs text-muted-foreground">
-        Formato CSV esperado (com cabeçalho): <code>matricula,nome,cpf,email,setor,cargo,data_nascimento</code>. Data no formato AAAA-MM-DD.
+        Formato CSV esperado (com cabeçalho): <code>matricula,nome,cpf,email,setor,cargo,data_nascimento,data_admissao</code> (<code>data_admissao</code> é opcional, mas é o critério de desempate da apuração). Data no formato AAAA-MM-DD.
       </p>
       {importMsg && <p className="text-xs text-primary">{importMsg}</p>}
 
@@ -87,7 +88,7 @@ function EmployeesPage() {
         <div className="overflow-x-auto rounded-lg border border-border bg-card">
           <table className="w-full text-sm">
             <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <tr><th className="p-3">Matrícula</th><th>Nome</th><th>Setor</th><th>Nasc.</th><th>Ativo</th><th /></tr>
+              <tr><th className="p-3">Matrícula</th><th>Nome</th><th>Setor</th><th>Nasc.</th><th>Admissão</th><th>Ativo</th><th /></tr>
             </thead>
             <tbody>
               {q.data.map((e) => (
@@ -96,6 +97,7 @@ function EmployeesPage() {
                   <td>{e.nome}</td>
                   <td>{e.setor ?? "—"}</td>
                   <td>{e.data_nascimento}</td>
+                  <td>{e.data_admissao ?? "—"}</td>
                   <td>{e.ativo ? "Sim" : "Não"}</td>
                   <td className="pr-3 text-right space-x-2">
                     <button
@@ -108,6 +110,7 @@ function EmployeesPage() {
                         setor: e.setor ?? "",
                         cargo: e.cargo ?? "",
                         data_nascimento: e.data_nascimento,
+                        data_admissao: e.data_admissao ?? "",
                         ativo: e.ativo,
                       })}
                       className="text-muted-foreground hover:text-foreground"
@@ -150,6 +153,7 @@ function EmpDialog({
     setor: initial.setor ?? "",
     cargo: initial.cargo ?? "",
     data_nascimento: initial.data_nascimento ?? "",
+    data_admissao: initial.data_admissao ?? "",
     ativo: initial.ativo ?? true,
   });
   return (
@@ -166,6 +170,7 @@ function EmpDialog({
             setor: f.setor || null,
             cargo: f.cargo || null,
             data_nascimento: f.data_nascimento,
+            data_admissao: f.data_admissao || null,
             ativo: f.ativo,
           });
         }}
@@ -175,6 +180,12 @@ function EmpDialog({
         <div className="grid grid-cols-2 gap-2">
           <input required placeholder="Matrícula" value={f.matricula} onChange={(e) => setF({ ...f, matricula: e.target.value })} className={inputCls} />
           <input required type="date" value={f.data_nascimento} onChange={(e) => setF({ ...f, data_nascimento: e.target.value })} className={inputCls} />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-xs text-muted-foreground">
+            Data de admissão (desempate)
+            <input type="date" value={f.data_admissao} onChange={(e) => setF({ ...f, data_admissao: e.target.value })} className={inputCls} />
+          </label>
         </div>
         <input required placeholder="Nome completo" value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} className={inputCls} />
         <div className="grid grid-cols-2 gap-2">
@@ -221,6 +232,7 @@ function parseCsv(text: string): EmpInput[] {
       setor: cols[idx("setor")] || null,
       cargo: cols[idx("cargo")] || null,
       data_nascimento: dn,
+      data_admissao: (idx("data_admissao") >= 0 ? cols[idx("data_admissao")] : "") || null,
       ativo: true,
     });
   }

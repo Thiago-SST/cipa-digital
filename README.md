@@ -278,3 +278,14 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+## Armazenamento (buckets)
+
+O projeto depende de dois buckets **privados** no storage (os arquivos são servidos apenas via URL assinada gerada no servidor):
+
+| Bucket | Visibilidade | Conteúdo |
+| --- | --- | --- |
+| `candidate-photos` | privada | fotos dos candidatos (JPG/PNG/WEBP, até 3 MB) |
+| `election-documents` | privada | atas em PDF e documentos comprobatórios da eleição |
+
+Os buckets não podem ser criados por migration SQL (`storage.buckets` é gerenciado pela plataforma); ao reproduzir o projeto em outro ambiente, crie os dois manualmente como privados. As políticas de acesso aos arquivos (`storage.objects`) já estão versionadas nas migrations.

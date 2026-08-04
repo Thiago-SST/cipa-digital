@@ -347,6 +347,7 @@ export type Database = {
           cargo: string | null
           cpf: string | null
           created_at: string
+          data_admissao: string | null
           data_nascimento: string
           email: string | null
           id: string
@@ -359,6 +360,7 @@ export type Database = {
           cargo?: string | null
           cpf?: string | null
           created_at?: string
+          data_admissao?: string | null
           data_nascimento: string
           email?: string | null
           id?: string
@@ -371,6 +373,7 @@ export type Database = {
           cargo?: string | null
           cpf?: string | null
           created_at?: string
+          data_admissao?: string | null
           data_nascimento?: string
           email?: string | null
           id?: string
