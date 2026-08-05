@@ -50,7 +50,7 @@ export function PhotoPicker({
     });
   }
 
-  function handleFile(file: File) {
+  async function handleFile(file: File) {
     const message = validatePhotoFile({ name: file.name, type: file.type, size: file.size });
     if (message) {
       clearSelection();
@@ -58,6 +58,19 @@ export function PhotoPicker({
       return;
     }
     const previewUrl = URL.createObjectURL(file);
+    // Confirma que o arquivo é realmente uma imagem decodificável (extensão não basta).
+    const decodable = await new Promise<boolean>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
+      img.src = previewUrl;
+    });
+    if (!decodable) {
+      URL.revokeObjectURL(previewUrl);
+      clearSelection();
+      setError("Arquivo inválido: não é uma imagem JPG, PNG ou WEBP legítima.");
+      return;
+    }
     setError(null);
     setSelected((prev) => {
       if (prev) URL.revokeObjectURL(prev.previewUrl);

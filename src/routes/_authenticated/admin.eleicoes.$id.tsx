@@ -1722,17 +1722,17 @@ function LiveMonitorTab({ electionId, status }: { electionId: string; status: El
           <p className="mt-3 text-sm text-muted-foreground">Sem candidatos aprovados.</p>
         ) : (
           <ul className="mt-4 space-y-2">
-            {d.ranking.map((c, i) => {
+            {d.ranking.map((c: any, i: number) => {
               const pct = d.stats.nominais ? (c.votos / d.stats.nominais) * 100 : 0;
               const barPct = (c.votos / maxVotos) * 100;
-              const eleito = i < d.stats.vagasTitulares;
-              const suplente = !eleito && i < d.stats.vagasTitulares + d.stats.vagasSuplentes;
+              const eleito = c.classificacao === "titular";
+              const suplente = c.classificacao === "suplente";
               return (
                 <li key={c.id} className="rounded-md border border-border bg-background p-3">
                   <div className="flex items-center justify-between gap-3 text-sm">
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-muted text-[11px] font-bold">
-                        {i + 1}
+                        {c.posicao ?? i + 1}
                       </span>
                       <div className="min-w-0">
                         <div className="truncate font-medium">

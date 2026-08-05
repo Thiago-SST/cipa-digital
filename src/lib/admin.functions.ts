@@ -1082,18 +1082,10 @@ export const getElectionLiveMonitor = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ electionId: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
     const sb = await ensureAdmin(context.userId);
-    const [{ data: el }, { data: candidates }, { data: votes }, { data: tokens }, { count: eligible }] =
+    const { computeElectionResults } = await import("./results.server");
+    const [results, { data: votes }, { data: tokens }] =
       await Promise.all([
-        sb
-          .from("elections")
-          .select("id, nome, status, vagas_titulares, vagas_suplentes, data_inicio_votacao, data_fim_votacao")
-          .eq("id", data.electionId)
-          .single(),
-        sb
-          .from("candidates")
-          .select("id, nome, matricula, setor, numero")
-          .eq("election_id", data.electionId)
-          .eq("status", "approved"),
+        computeElectionResults(sb, data.electionId),
         sb
           .from("votes")
           .select("candidate_id, tipo, created_at")
@@ -1105,25 +1097,10 @@ export const getElectionLiveMonitor = createServerFn({ method: "GET" })
           .eq("election_id", data.electionId)
           .order("voted_at", { ascending: false })
           .limit(20),
-        sb.from("employees").select("id", { count: "exact", head: true }).eq("ativo", true),
       ]);
 
-    const tally = new Map<string, number>();
-    let brancos = 0;
-    let nulos = 0;
-    let nominais = 0;
-    (votes ?? []).forEach((v) => {
-      if (v.tipo === "branco") brancos += 1;
-      else if (v.tipo === "nulo") nulos += 1;
-      else if (v.candidate_id) {
-        nominais += 1;
-        tally.set(v.candidate_id, (tally.get(v.candidate_id) ?? 0) + 1);
-      }
-    });
-
-    const ranking = (candidates ?? [])
-      .map((c) => ({ ...c, votos: tally.get(c.id) ?? 0 }))
-      .sort((a, b) => b.votos - a.votos || (a.numero ?? 9999) - (b.numero ?? 9999));
+    // Ranking unificado: mesma ordenação e desempate da apuração oficial.
+    const ranking = results.ranking;
 
     // Buckets de 5 minutos nos últimos 60 minutos
     const now = Date.now();
@@ -1140,28 +1117,22 @@ export const getElectionLiveMonitor = createServerFn({ method: "GET" })
       buckets.push({ ts: new Date(end).toISOString(), votos: count });
     }
 
-    const totalVotos = votes?.length ?? 0;
-    const votaram = tokens?.length ? tokens.length : totalVotos;
-    // vote_tokens é a fonte real; reconsulta count para exato
-    const { count: tokenCount } = await sb
-      .from("vote_tokens")
-      .select("id", { count: "exact", head: true })
-      .eq("election_id", data.electionId);
-
     return {
-      election: el!,
+      election: results.election,
       ranking,
+      empates: results.empates,
+      empatesComAdmissaoFaltante: results.empatesComAdmissaoFaltante,
       buckets,
       recentVotes: (tokens ?? []).map((t) => ({ voted_at: t.voted_at })),
       stats: {
-        totalVotos,
-        nominais,
-        brancos,
-        nulos,
-        eleitoresQueVotaram: tokenCount ?? votaram,
-        eleitoresAptos: eligible ?? 0,
-        vagasTitulares: el!.vagas_titulares,
-        vagasSuplentes: el!.vagas_suplentes,
+        totalVotos: results.stats.totalVotos,
+        nominais: results.stats.votosNominais,
+        brancos: results.stats.votosBrancos,
+        nulos: results.stats.votosNulos,
+        eleitoresQueVotaram: results.stats.eleitoresQueVotaram,
+        eleitoresAptos: results.stats.eleitoresAptos,
+        vagasTitulares: results.stats.vagasTitulares,
+        vagasSuplentes: results.stats.vagasSuplentes,
       },
       generatedAt: new Date().toISOString(),
     };

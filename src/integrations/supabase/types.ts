@@ -383,6 +383,30 @@ export type Database = {
         }
         Relationships: []
       }
+      login_attempts: {
+        Row: {
+          created_at: string
+          id: string
+          identificador: string
+          ip: string | null
+          sucesso: boolean
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          identificador: string
+          ip?: string | null
+          sucesso?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          identificador?: string
+          ip?: string | null
+          sucesso?: boolean
+        }
+        Relationships: []
+      }
       organization_settings: {
         Row: {
           cnpj: string | null
