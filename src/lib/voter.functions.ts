@@ -59,9 +59,26 @@ export const voterLogin = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { getVoterSession } = await import("./voter-session.server");
+    const { getRequestHeader } = await import("@tanstack/react-start/server");
+    const { assertLoginAllowed, recordLoginAttempt, normalizeIdentifier } = await import(
+      "./login-guard.server"
+    );
 
     const raw = data.identificador.trim();
     const digits = onlyDigits(raw);
+    const identificador = normalizeIdentifier(raw);
+    const ip =
+      (getRequestHeader("x-forwarded-for") ?? "").split(",")[0]?.trim() ||
+      getRequestHeader("cf-connecting-ip") ||
+      null;
+
+    await assertLoginAllowed(supabaseAdmin, identificador, ip);
+
+    const fail = async (msg: string) => {
+      await recordLoginAttempt(supabaseAdmin, identificador, ip, false);
+      return new Error(msg);
+    };
+    const CREDENCIAL_INVALIDA = "Matrícula/CPF ou data de nascimento não confere.";
 
     // Procura por matrícula OU CPF
     const { data: emp, error } = await supabaseAdmin
@@ -71,33 +88,33 @@ export const voterLogin = createServerFn({ method: "POST" })
       .maybeSingle();
 
     if (error) throw new Error("Erro ao validar credenciais.");
-    if (!emp || !emp.ativo) throw new Error("Empregado não encontrado ou inativo.");
-    if (emp.data_nascimento !== data.dataNascimento) {
-      throw new Error("Data de nascimento não confere.");
-    }
+    if (!emp || !emp.ativo) throw await fail(CREDENCIAL_INVALIDA);
+    if (emp.data_nascimento !== data.dataNascimento) throw await fail(CREDENCIAL_INVALIDA);
 
-    // Eleição em votação
+    // Eleição corrente: em votação ou com inscrições abertas (autoinscrição usa o mesmo login).
     const { data: election } = await supabaseAdmin
       .from("elections")
-      .select("id")
-      .eq("status", "voting")
+      .select(
+        "id, status, data_inicio_votacao, data_fim_votacao, data_inicio_inscricao, data_fim_inscricao",
+      )
+      .in("status", ["voting", "registration"])
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (!election) throw new Error("Nenhuma eleição em andamento no momento.");
-    if (!isWithinWindow(null, null)) {
-      // placeholder para o typechecker; a checagem real está abaixo
-    }
 
-    // Janela de votação
-    const { data: elFull } = await supabaseAdmin
-      .from("elections")
-      .select("data_inicio_votacao, data_fim_votacao")
-      .eq("id", election.id)
-      .maybeSingle();
-    if (elFull && !isWithinWindow(elFull.data_inicio_votacao, elFull.data_fim_votacao)) {
+    if (
+      election.status === "voting" &&
+      !isWithinWindow(election.data_inicio_votacao, election.data_fim_votacao)
+    ) {
       throw new Error("A votação não está aberta neste horário.");
+    }
+    if (
+      election.status === "registration" &&
+      !isWithinWindow(election.data_inicio_inscricao, election.data_fim_inscricao)
+    ) {
+      throw new Error("As inscrições não estão abertas neste horário.");
     }
 
     const session = await getVoterSession();
@@ -111,8 +128,11 @@ export const voterLogin = createServerFn({ method: "POST" })
     await supabaseAdmin.from("access_logs").insert({
       ator: emp.matricula,
       acao: "voter.login",
+      ip,
       detalhes: { electionId: election.id },
     });
+
+    await recordLoginAttempt(supabaseAdmin, identificador, ip, true);
 
     return { ok: true };
   });
@@ -367,6 +387,11 @@ export const uploadMyCandidacyPhoto = createServerFn({ method: "POST" })
     });
     const { error } = await supabaseAdmin.from("candidates").update({ foto_url: path }).eq("id", cand.id);
     if (error) throw new Error(error.message);
+    await supabaseAdmin.from("access_logs").insert({
+      ator: session.data.matricula ?? null,
+      acao: "candidate.photo_upload",
+      detalhes: { electionId: election.id, candidateId: cand.id },
+    });
     return { url: await resolvePhotoUrl(supabaseAdmin, path) };
   });
 
