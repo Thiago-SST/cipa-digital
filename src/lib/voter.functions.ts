@@ -387,6 +387,11 @@ export const uploadMyCandidacyPhoto = createServerFn({ method: "POST" })
     });
     const { error } = await supabaseAdmin.from("candidates").update({ foto_url: path }).eq("id", cand.id);
     if (error) throw new Error(error.message);
+    await supabaseAdmin.from("access_logs").insert({
+      ator: session.data.matricula ?? null,
+      acao: "candidate.photo_upload",
+      detalhes: { electionId: election.id, candidateId: cand.id },
+    });
     return { url: await resolvePhotoUrl(supabaseAdmin, path) };
   });
 
