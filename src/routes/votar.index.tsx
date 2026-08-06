@@ -158,6 +158,8 @@ function VotarLogin() {
             </ul>
           </section>
         )}
+
+        <ChallengePanel />
       </div>
     </VoterShell>
   );
