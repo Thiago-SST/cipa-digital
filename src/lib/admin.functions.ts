@@ -920,6 +920,57 @@ export const listChallenges = createServerFn({ method: "GET" })
     return rows ?? [];
   });
 
+/**
+ * Lista impugnações de todas as eleições, com filtros de eleição, decisão e busca textual.
+ */
+export const listAllChallenges = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        electionId: z.string().uuid().nullable().optional(),
+        decisao: z.enum(["pendente", "deferido", "indeferido"]).nullable().optional(),
+        busca: z.string().trim().max(120).nullable().optional(),
+        somentePeriodoAtivo: z.boolean().optional(),
+      })
+      .parse(d ?? {}),
+  )
+  .handler(async ({ context, data }) => {
+    const sb = await ensureAdmin(context.userId);
+
+    const { data: elections } = await sb
+      .from("elections")
+      .select("id, nome, status")
+      .order("created_at", { ascending: false });
+
+    const activeIds = (elections ?? [])
+      .filter((e) => e.status === "registration" || e.status === "homologation")
+      .map((e) => e.id);
+
+    let query = sb
+      .from("candidate_challenges")
+      .select("*, candidates(nome, matricula, numero)")
+      .order("created_at", { ascending: false });
+
+    if (data.electionId) query = query.eq("election_id", data.electionId);
+    if (data.decisao) query = query.eq("decisao", data.decisao);
+    if (data.somentePeriodoAtivo) {
+      if (activeIds.length === 0) {
+        return { rows: [], elections: elections ?? [], activeIds };
+      }
+      query = query.in("election_id", activeIds);
+    }
+    if (data.busca) {
+      const t = data.busca.replace(/[%,]/g, " ");
+      query = query.or(`autor_nome.ilike.%${t}%,autor_matricula.ilike.%${t}%,motivo.ilike.%${t}%`);
+    }
+
+    const { data: rows, error } = await query;
+    if (error) throw new Error(error.message);
+
+    return { rows: rows ?? [], elections: elections ?? [], activeIds };
+  });
+
 export const judgeChallenge = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
