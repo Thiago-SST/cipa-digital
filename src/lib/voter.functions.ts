@@ -420,6 +420,44 @@ const challengeSchema = z.object({
   motivo: z.string().trim().min(10).max(1000),
 });
 
+/**
+ * Painel público de impugnações: lista as candidaturas da eleição corrente
+ * enquanto ela estiver em `registration` ou `homologation`.
+ */
+export const getChallengePanel = createServerFn({ method: "GET" }).handler(async () => {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { getVoterSession } = await import("./voter-session.server");
+  const session = await getVoterSession();
+
+  const { data: election } = await supabaseAdmin
+    .from("elections")
+    .select("id, nome, status")
+    .in("status", ["registration", "homologation"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!election) {
+    return { open: false as const, authenticated: !!session.data.employeeId };
+  }
+
+  const { data: candidates } = await supabaseAdmin
+    .from("candidates")
+    .select("id, nome, matricula, setor, cargo, numero, status, foto_url")
+    .eq("election_id", election.id)
+    .in("status", ["pending", "approved"])
+    .order("nome", { ascending: true });
+
+  const { withPhotoUrls } = await import("./photos.server");
+
+  return {
+    open: true as const,
+    authenticated: !!session.data.employeeId,
+    election,
+    candidates: await withPhotoUrls(supabaseAdmin, candidates ?? []),
+  };
+});
+
 export const submitChallenge = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => challengeSchema.parse(d))
   .handler(async ({ data }) => {

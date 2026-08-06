@@ -6,6 +6,7 @@ import { LogIn, AlertCircle, Vote, ClipboardEdit, CalendarClock } from "lucide-r
 
 import { voterLogin, getActiveElectionInfo, listPublicNotices } from "@/lib/voter.functions";
 import { VoterShell } from "@/components/voter-shell";
+import { ChallengePanel } from "@/components/challenge-panel";
 
 export const Route = createFileRoute("/votar/")({
   head: () => ({
@@ -157,6 +158,8 @@ function VotarLogin() {
             </ul>
           </section>
         )}
+
+        <ChallengePanel />
       </div>
     </VoterShell>
   );
