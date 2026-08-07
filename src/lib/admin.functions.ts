@@ -949,7 +949,9 @@ export const listAllChallenges = createServerFn({ method: "GET" })
 
     let query = sb
       .from("candidate_challenges")
-      .select("*, candidates(nome, matricula, numero)")
+      .select(
+        "*, candidates(id, nome, matricula, numero, setor, cargo, proposta, status, foto_url)",
+      )
       .order("created_at", { ascending: false });
 
     if (data.electionId) query = query.eq("election_id", data.electionId);
@@ -968,7 +970,20 @@ export const listAllChallenges = createServerFn({ method: "GET" })
     const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
 
-    return { rows: rows ?? [], elections: elections ?? [], activeIds };
+    const { resolvePhotoUrl } = await import("./photos.server");
+    const withPhotos = await Promise.all(
+      (rows ?? []).map(async (r: any) => ({
+        ...r,
+        candidates: r.candidates
+          ? {
+              ...r.candidates,
+              foto_display_url: await resolvePhotoUrl(sb, r.candidates.foto_url ?? null),
+            }
+          : null,
+      })),
+    );
+
+    return { rows: withPhotos, elections: elections ?? [], activeIds };
   });
 
 export const judgeChallenge = createServerFn({ method: "POST" })

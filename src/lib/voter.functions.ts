@@ -443,7 +443,7 @@ export const getChallengePanel = createServerFn({ method: "GET" }).handler(async
 
   const { data: candidates } = await supabaseAdmin
     .from("candidates")
-    .select("id, nome, matricula, setor, cargo, numero, status, foto_url")
+    .select("id, nome, setor, cargo, numero, status, foto_url")
     .eq("election_id", election.id)
     .in("status", ["pending", "approved"])
     .order("nome", { ascending: true });
