@@ -323,62 +323,7 @@ function ProcessoTab({
         </div>
       </section>
 
-      <MilestonesEditor id={id} el={el} />
     </div>
-  );
-}
-
-function MilestonesEditor({
-  id,
-  el,
-}: {
-  id: string;
-  el: { mandato_inicio?: string | null; mandato_fim?: string | null; data_posse?: string | null };
-}) {
-  const qc = useQueryClient();
-  const fn = useServerFn(updateElectionMilestones);
-  const [mi, setMi] = useState(el.mandato_inicio ?? "");
-  const [mf, setMf] = useState(el.mandato_fim ?? "");
-  const [dp, setDp] = useState(el.data_posse ?? "");
-  const m = useMutation({
-    mutationFn: () =>
-      fn({
-        data: {
-          id,
-          mandato_inicio: mi || null,
-          mandato_fim: mf || null,
-          data_posse: dp || null,
-        },
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-election", id] }),
-  });
-  return (
-    <section className="rounded-lg border border-border bg-card p-5">
-      <h2 className="text-sm font-semibold">Datas do mandato</h2>
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
-        <label className="text-xs font-medium">
-          Início do mandato
-          <input type="date" value={mi} onChange={(e) => setMi(e.target.value)} className={`${inputCls} mt-1`} />
-        </label>
-        <label className="text-xs font-medium">
-          Fim do mandato
-          <input type="date" value={mf} onChange={(e) => setMf(e.target.value)} className={`${inputCls} mt-1`} />
-        </label>
-        <label className="text-xs font-medium">
-          Data da posse
-          <input type="date" value={dp} onChange={(e) => setDp(e.target.value)} className={`${inputCls} mt-1`} />
-        </label>
-      </div>
-      <div className="mt-3 flex justify-end">
-        <button
-          onClick={() => m.mutate()}
-          disabled={m.isPending}
-          className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
-        >
-          {m.isPending ? "Salvando..." : "Salvar datas"}
-        </button>
-      </div>
-    </section>
   );
 }
 
