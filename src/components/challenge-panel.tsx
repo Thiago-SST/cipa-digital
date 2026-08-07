@@ -8,7 +8,6 @@ import { getChallengePanel, submitChallenge } from "@/lib/voter.functions";
 type Candidate = {
   id: string;
   nome: string;
-  matricula: string;
   setor: string | null;
   cargo: string | null;
   numero: number | null;
@@ -66,8 +65,7 @@ export function ChallengePanel() {
                   {c.nome}
                 </div>
                 <div className="truncate text-xs text-muted-foreground">
-                  matrícula {c.matricula}
-                  {c.setor ? ` · ${c.setor}` : ""}
+                  {[c.setor, c.cargo].filter(Boolean).join(" · ")}
                   {c.status === "pending" ? " · aguardando homologação" : ""}
                 </div>
               </div>
