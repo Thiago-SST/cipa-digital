@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Vote, Calendar, Pencil, Trash2 } from "lucide-react";
+import { Plus, Vote, Calendar, Trash2 } from "lucide-react";
 
 import { listElections, upsertElection, deleteElection } from "@/lib/admin.functions";
 
@@ -20,15 +20,8 @@ export const Route = createFileRoute("/_authenticated/admin/eleicoes")({
 });
 
 type ElectionFormValues = {
-  id?: string;
   nome: string;
   descricao: string | null;
-  data_inicio_inscricao: string | null;
-  data_fim_inscricao: string | null;
-  data_inicio_votacao: string | null;
-  data_fim_votacao: string | null;
-  vagas_titulares: number;
-  vagas_suplentes: number;
 };
 
 type ElectionRow = {
@@ -72,16 +65,28 @@ function ElectionsPage() {
   const upsert = useServerFn(upsertElection);
   const remove = useServerFn(deleteElection);
   const qc = useQueryClient();
-  const [editing, setEditing] = useState<ElectionFormValues | null>(null);
+  const [creating, setCreating] = useState(false);
   const [confirming, setConfirming] = useState<ElectionRow | null>(null);
 
   const q = useQuery({ queryKey: ["admin-elections"], queryFn: () => list() });
 
   const m = useMutation({
-    mutationFn: (input: ElectionFormValues) => upsert({ data: input }),
+    mutationFn: (input: ElectionFormValues) =>
+      upsert({
+        data: {
+          nome: input.nome,
+          descricao: input.descricao,
+          data_inicio_inscricao: null,
+          data_fim_inscricao: null,
+          data_inicio_votacao: null,
+          data_fim_votacao: null,
+          vagas_titulares: 3,
+          vagas_suplentes: 3,
+        },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-elections"] });
-      setEditing(null);
+      setCreating(false);
     },
   });
 
@@ -98,21 +103,15 @@ function ElectionsPage() {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Eleições</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Crie e gerencie ciclos eleitorais da CIPA.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Crie uma eleição e configure datas, vagas e demais detalhes dentro dela.
+          </p>
         </div>
         <button
-          onClick={() =>
-            setEditing({
-              nome: "",
-              descricao: "",
-              data_inicio_inscricao: "",
-              data_fim_inscricao: "",
-              data_inicio_votacao: "",
-              data_fim_votacao: "",
-              vagas_titulares: 3,
-              vagas_suplentes: 3,
-            } as unknown as ElectionFormValues)
-          }
+          onClick={() => {
+            m.reset();
+            setCreating(true);
+          }}
           className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" /> Nova eleição
@@ -154,13 +153,6 @@ function ElectionsPage() {
                 </div>
                 </Link>
                 <button
-                  onClick={() => openEdit(e as ElectionRow, setEditing)}
-                  className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs hover:bg-muted"
-                  title="Editar"
-                >
-                  <Pencil className="h-3.5 w-3.5" /> Editar
-                </button>
-                <button
                   onClick={() => {
                     del.reset();
                     setConfirming(e as ElectionRow);
@@ -176,11 +168,10 @@ function ElectionsPage() {
         </ul>
       )}
 
-      {editing && (
+      {creating && (
         <ElectionDialog
-          initial={editing}
-          onClose={() => setEditing(null)}
-          onSubmit={(v) => m.mutate({ ...v, id: editing.id })}
+          onClose={() => setCreating(false)}
+          onSubmit={(v) => m.mutate(v)}
           pending={m.isPending}
           error={m.error as Error | null}
         />
@@ -220,99 +211,38 @@ function ElectionsPage() {
   );
 }
 
-function openEdit(row: ElectionRow, set: (v: ElectionFormValues) => void) {
-  set({
-    id: row.id,
-    nome: row.nome,
-    descricao: row.descricao,
-    data_inicio_inscricao: row.data_inicio_inscricao,
-    data_fim_inscricao: row.data_fim_inscricao,
-    data_inicio_votacao: row.data_inicio_votacao,
-    data_fim_votacao: row.data_fim_votacao,
-    vagas_titulares: row.vagas_titulares,
-    vagas_suplentes: row.vagas_suplentes,
-  });
-}
-
 function ElectionDialog({
-  initial,
   onClose,
   onSubmit,
   pending,
   error,
 }: {
-  initial: ElectionFormValues;
   onClose: () => void;
-  onSubmit: (v: {
-    nome: string;
-    descricao: string | null;
-    data_inicio_inscricao: string | null;
-    data_fim_inscricao: string | null;
-    data_inicio_votacao: string | null;
-    data_fim_votacao: string | null;
-    vagas_titulares: number;
-    vagas_suplentes: number;
-  }) => void;
+  onSubmit: (v: ElectionFormValues) => void;
   pending: boolean;
   error: Error | null;
 }) {
-  const toLocal = (v: string | null | undefined) => (v ? v.slice(0, 16) : "");
-  const [form, setForm] = useState({
-    nome: initial.nome ?? "",
-    descricao: initial.descricao ?? "",
-    data_inicio_inscricao: toLocal(initial.data_inicio_inscricao),
-    data_fim_inscricao: toLocal(initial.data_fim_inscricao),
-    data_inicio_votacao: toLocal(initial.data_inicio_votacao),
-    data_fim_votacao: toLocal(initial.data_fim_votacao),
-    vagas_titulares: initial.vagas_titulares ?? 3,
-    vagas_suplentes: initial.vagas_suplentes ?? 3,
-  });
+  const [form, setForm] = useState({ nome: "", descricao: "" });
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/40 p-4">
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          onSubmit({
-            nome: form.nome,
-            descricao: form.descricao || null,
-            data_inicio_inscricao: form.data_inicio_inscricao || null,
-            data_fim_inscricao: form.data_fim_inscricao || null,
-            data_inicio_votacao: form.data_inicio_votacao || null,
-            data_fim_votacao: form.data_fim_votacao || null,
-            vagas_titulares: Number(form.vagas_titulares),
-            vagas_suplentes: Number(form.vagas_suplentes),
-          });
+          onSubmit({ nome: form.nome, descricao: form.descricao || null });
         }}
         className="w-full max-w-lg space-y-4 rounded-lg border border-border bg-card p-6 shadow-xl"
       >
-        <h2 className="text-lg font-semibold">{initial.id ? "Editar eleição" : "Nova eleição"}</h2>
+        <h2 className="text-lg font-semibold">Nova eleição</h2>
+        <p className="text-xs text-muted-foreground">
+          Datas e vagas são configuradas na aba Configurações da própria eleição.
+        </p>
         <Field label="Nome">
           <input required value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className={inputCls} />
         </Field>
         <Field label="Descrição">
           <textarea rows={2} value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} className={inputCls} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Início inscrições">
-            <input type="datetime-local" value={form.data_inicio_inscricao} onChange={(e) => setForm({ ...form, data_inicio_inscricao: e.target.value })} className={inputCls} />
-          </Field>
-          <Field label="Fim inscrições">
-            <input type="datetime-local" value={form.data_fim_inscricao} onChange={(e) => setForm({ ...form, data_fim_inscricao: e.target.value })} className={inputCls} />
-          </Field>
-          <Field label="Início votação">
-            <input type="datetime-local" value={form.data_inicio_votacao} onChange={(e) => setForm({ ...form, data_inicio_votacao: e.target.value })} className={inputCls} />
-          </Field>
-          <Field label="Fim votação">
-            <input type="datetime-local" value={form.data_fim_votacao} onChange={(e) => setForm({ ...form, data_fim_votacao: e.target.value })} className={inputCls} />
-          </Field>
-          <Field label="Vagas titulares">
-            <input type="number" min={1} value={form.vagas_titulares} onChange={(e) => setForm({ ...form, vagas_titulares: Number(e.target.value) })} className={inputCls} />
-          </Field>
-          <Field label="Vagas suplentes">
-            <input type="number" min={0} value={form.vagas_suplentes} onChange={(e) => setForm({ ...form, vagas_suplentes: Number(e.target.value) })} className={inputCls} />
-          </Field>
-        </div>
         {error && <p className="text-sm text-destructive">{error.message}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className="rounded-md border border-border px-4 py-2 text-sm">Cancelar</button>
