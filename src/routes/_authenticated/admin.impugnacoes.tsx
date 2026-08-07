@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Gavel, Search, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Gavel, Search, X } from "lucide-react";
 
 import { listAllChallenges, judgeChallenge } from "@/lib/admin.functions";
 
@@ -48,6 +48,7 @@ function ChallengesPage() {
   const [busca, setBusca] = useState("");
   const [buscaAplicada, setBuscaAplicada] = useState("");
   const [somentePeriodoAtivo, setSomentePeriodoAtivo] = useState(true);
+  const [aberto, setAberto] = useState<Record<string, boolean>>({});
 
   const q = useQuery({
     queryKey: ["all-challenges", electionId, decisao, buscaAplicada, somentePeriodoAtivo],
@@ -186,9 +187,18 @@ function ChallengesPage() {
               <li key={c.id} className="space-y-2 py-3 text-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="font-medium">
+                    <button
+                      type="button"
+                      onClick={() => setAberto((a) => ({ ...a, [c.id]: !a[c.id] }))}
+                      className="flex items-center gap-1 text-left font-medium hover:underline"
+                    >
+                      {aberto[c.id] ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      )}
                       Candidato: {c.candidates?.nome ?? "—"} (mat. {c.candidates?.matricula ?? "—"})
-                    </div>
+                    </button>
                     <div className="text-xs text-muted-foreground">
                       {electionName(c.election_id)} · Autor: {c.autor_nome} (mat. {c.autor_matricula}) ·{" "}
                       {new Date(c.created_at).toLocaleString("pt-BR")}
@@ -201,6 +211,41 @@ function ChallengesPage() {
                   </span>
                 </div>
                 <p className="rounded-md bg-muted/40 p-2 text-xs">{c.motivo}</p>
+                {aberto[c.id] && c.candidates && (
+                  <div className="flex gap-3 rounded-md border border-border bg-background p-3">
+                    {c.candidates.foto_display_url ? (
+                      <img
+                        src={c.candidates.foto_display_url}
+                        alt={`Foto de ${c.candidates.nome}`}
+                        className="h-20 w-20 shrink-0 rounded-md object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-md bg-secondary text-xs font-semibold text-muted-foreground">
+                        sem foto
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1 space-y-1 text-xs">
+                      <div>
+                        <strong>Número:</strong> {c.candidates.numero ?? "—"} ·{" "}
+                        <strong>Status:</strong>{" "}
+                        {c.candidates.status === "approved"
+                          ? "homologada"
+                          : c.candidates.status === "rejected"
+                            ? "indeferida"
+                            : "aguardando homologação"}
+                      </div>
+                      <div>
+                        <strong>Setor:</strong> {c.candidates.setor || "—"} ·{" "}
+                        <strong>Cargo:</strong> {c.candidates.cargo || "—"}
+                      </div>
+                      <div className="whitespace-pre-wrap text-muted-foreground">
+                        <strong className="text-foreground">Proposta:</strong>{" "}
+                        {c.candidates.proposta || "Não informada."}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {c.justificativa && (
                   <p className="text-xs text-muted-foreground">
                     <strong>Justificativa:</strong> {c.justificativa}
