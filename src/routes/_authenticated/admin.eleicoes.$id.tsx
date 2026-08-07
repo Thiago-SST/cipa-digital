@@ -863,36 +863,240 @@ function DocumentsTab({ electionId }: { electionId: string }) {
   );
 }
 
-function DetailsTab({
-  el,
-}: {
-  el: {
-    id: string;
-    nome: string;
-    descricao: string | null;
-    data_inicio_inscricao: string | null;
-    data_fim_inscricao: string | null;
-    data_inicio_votacao: string | null;
-    data_fim_votacao: string | null;
-    vagas_titulares: number;
-    vagas_suplentes: number;
-    status: string;
-  };
-}) {
+type ElectionDetailData = {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  data_inicio_inscricao: string | null;
+  data_fim_inscricao: string | null;
+  data_inicio_votacao: string | null;
+  data_fim_votacao: string | null;
+  vagas_titulares: number;
+  vagas_suplentes: number;
+  status: string;
+  data_publicacao_edital?: string | null;
+  data_homologacao_inscricoes?: string | null;
+  data_homologacao_resultado?: string | null;
+  mandato_inicio?: string | null;
+  mandato_fim?: string | null;
+  data_posse?: string | null;
+};
+
+function DetailsTab({ el }: { el: ElectionDetailData }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-border bg-card p-5 text-sm">
-        <dl className="grid gap-3 sm:grid-cols-2">
-          <Info label="Descrição" value={el.descricao ?? "—"} />
-          <Info label="Início da votação" value={fmt(el.data_inicio_votacao)} />
-          <Info label="Fim da votação" value={fmt(el.data_fim_votacao)} />
-        </dl>
-      </div>
+      <GeneralEditor el={el} />
       <SeatsEditor el={el} />
+      <TimelineEditor el={el} />
     </div>
   );
 }
 
+function GeneralEditor({ el }: { el: ElectionDetailData }) {
+  const fnUpsert = useServerFn(upsertElection);
+  const qc = useQueryClient();
+  const toLocal = (v: string | null | undefined) => (v ? new Date(v).toISOString().slice(0, 16) : "");
+  const [form, setForm] = useState({
+    nome: el.nome,
+    descricao: el.descricao ?? "",
+    data_inicio_inscricao: toLocal(el.data_inicio_inscricao),
+    data_fim_inscricao: toLocal(el.data_fim_inscricao),
+    data_inicio_votacao: toLocal(el.data_inicio_votacao),
+    data_fim_votacao: toLocal(el.data_fim_votacao),
+  });
+
+  const m = useMutation({
+    mutationFn: () =>
+      fnUpsert({
+        data: {
+          id: el.id,
+          nome: form.nome,
+          descricao: form.descricao || null,
+          data_inicio_inscricao: form.data_inicio_inscricao || null,
+          data_fim_inscricao: form.data_fim_inscricao || null,
+          data_inicio_votacao: form.data_inicio_votacao || null,
+          data_fim_votacao: form.data_fim_votacao || null,
+          vagas_titulares: el.vagas_titulares,
+          vagas_suplentes: el.vagas_suplentes,
+        },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-election", el.id] });
+      qc.invalidateQueries({ queryKey: ["admin-elections"] });
+    },
+  });
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        m.mutate();
+      }}
+      className="rounded-lg border border-border bg-card p-5"
+    >
+      <h3 className="text-sm font-semibold">Dados gerais</h3>
+      <p className="mt-1 text-xs text-muted-foreground">Nome, descrição e as janelas de inscrição e votação.</p>
+
+      <div className="mt-4 grid gap-3">
+        <label className="block text-xs font-medium">
+          Nome da eleição
+          <input
+            required
+            value={form.nome}
+            onChange={(e) => setForm({ ...form, nome: e.target.value })}
+            className={`${inputCls} mt-1`}
+          />
+        </label>
+        <label className="block text-xs font-medium">
+          Descrição
+          <textarea
+            rows={2}
+            value={form.descricao}
+            onChange={(e) => setForm({ ...form, descricao: e.target.value })}
+            className={`${inputCls} mt-1`}
+          />
+        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-medium">
+            Início das inscrições
+            <input
+              type="datetime-local"
+              value={form.data_inicio_inscricao}
+              onChange={(e) => setForm({ ...form, data_inicio_inscricao: e.target.value })}
+              className={`${inputCls} mt-1`}
+            />
+          </label>
+          <label className="block text-xs font-medium">
+            Fim das inscrições
+            <input
+              type="datetime-local"
+              value={form.data_fim_inscricao}
+              onChange={(e) => setForm({ ...form, data_fim_inscricao: e.target.value })}
+              className={`${inputCls} mt-1`}
+            />
+          </label>
+          <label className="block text-xs font-medium">
+            Início da votação
+            <input
+              type="datetime-local"
+              value={form.data_inicio_votacao}
+              onChange={(e) => setForm({ ...form, data_inicio_votacao: e.target.value })}
+              className={`${inputCls} mt-1`}
+            />
+          </label>
+          <label className="block text-xs font-medium">
+            Fim da votação
+            <input
+              type="datetime-local"
+              value={form.data_fim_votacao}
+              onChange={(e) => setForm({ ...form, data_fim_votacao: e.target.value })}
+              className={`${inputCls} mt-1`}
+            />
+          </label>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+        {m.error && <span className="text-xs text-destructive">{(m.error as Error).message}</span>}
+        {m.isSuccess && <span className="text-xs text-primary">Dados atualizados.</span>}
+        <button
+          type="submit"
+          disabled={m.isPending}
+          className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+        >
+          {m.isPending ? "Salvando..." : "Salvar dados gerais"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function TimelineEditor({ el }: { el: ElectionDetailData }) {
+  const qc = useQueryClient();
+  const fn = useServerFn(updateElectionMilestones);
+  const homReg = useServerFn(homologateRegistrations);
+  const homRes = useServerFn(homologateResult);
+  const [mi, setMi] = useState(el.mandato_inicio ?? "");
+  const [mf, setMf] = useState(el.mandato_fim ?? "");
+  const [dp, setDp] = useState(el.data_posse ?? "");
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["admin-election", el.id] });
+
+  const m = useMutation({
+    mutationFn: () =>
+      fn({ data: { id: el.id, mandato_inicio: mi || null, mandato_fim: mf || null, data_posse: dp || null } }),
+    onSuccess: invalidate,
+  });
+  const reg = useMutation({ mutationFn: () => homReg({ data: { id: el.id } }), onSuccess: invalidate });
+  const res = useMutation({ mutationFn: () => homRes({ data: { id: el.id } }), onSuccess: invalidate });
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold">Linha do tempo da eleição</h3>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Marcos formais e datas de mandato. As homologações são ações que registram o marco no momento em que são
+        executadas.
+      </p>
+
+      <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+        <Info label="Publicação do edital" value={fmt(el.data_publicacao_edital ?? null)} />
+        <Info label="Início das inscrições" value={fmt(el.data_inicio_inscricao)} />
+        <Info label="Fim das inscrições" value={fmt(el.data_fim_inscricao)} />
+        <Info label="Homologação das inscrições" value={fmt(el.data_homologacao_inscricoes ?? null)} />
+        <Info label="Início da votação" value={fmt(el.data_inicio_votacao)} />
+        <Info label="Fim da votação" value={fmt(el.data_fim_votacao)} />
+        <Info label="Homologação do resultado" value={fmt(el.data_homologacao_resultado ?? null)} />
+      </dl>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={reg.isPending}
+          onClick={() => reg.mutate()}
+          className="rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
+        >
+          <ListChecks className="mr-1 inline h-3.5 w-3.5" /> Registrar homologação das inscrições
+        </button>
+        <button
+          type="button"
+          disabled={res.isPending}
+          onClick={() => res.mutate()}
+          className="rounded-md border border-border bg-background px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
+        >
+          <Gavel className="mr-1 inline h-3.5 w-3.5" /> Registrar homologação do resultado
+        </button>
+      </div>
+
+      <div className="mt-5 border-t border-border pt-4">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mandato e posse</h4>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <label className="text-xs font-medium">
+            Início do mandato
+            <input type="date" value={mi} onChange={(e) => setMi(e.target.value)} className={`${inputCls} mt-1`} />
+          </label>
+          <label className="text-xs font-medium">
+            Fim do mandato
+            <input type="date" value={mf} onChange={(e) => setMf(e.target.value)} className={`${inputCls} mt-1`} />
+          </label>
+          <label className="text-xs font-medium">
+            Data da posse
+            <input type="date" value={dp} onChange={(e) => setDp(e.target.value)} className={`${inputCls} mt-1`} />
+          </label>
+        </div>
+        <div className="mt-3 flex items-center justify-end gap-2">
+          {m.error && <span className="text-xs text-destructive">{(m.error as Error).message}</span>}
+          <button
+            type="button"
+            onClick={() => m.mutate()}
+            disabled={m.isPending}
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+          >
+            {m.isPending ? "Salvando..." : "Salvar datas de mandato"}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
 function SeatsEditor({
   el,
 }: {
