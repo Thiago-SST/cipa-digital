@@ -142,7 +142,7 @@ function ElectionDetail() {
 function tabLabel(t: Tab): string {
   const map: Record<Tab, string> = {
     processo: "Processo",
-    detalhes: "Detalhes",
+    detalhes: "Configurações",
     comissao: "Comissão",
     candidatos: "Candidatos",
     impugnacoes: "Impugnações",
