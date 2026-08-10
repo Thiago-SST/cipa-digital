@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Users, Vote, Activity, ArrowRight } from "lucide-react";
 
 import { getAdminDashboard } from "@/lib/admin.functions";
+import { QueryError } from "@/components/query-error";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
   component: Dashboard,
@@ -21,6 +22,15 @@ function Dashboard() {
   const q = useQuery({ queryKey: ["admin-dashboard"], queryFn: () => fn() });
 
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
+  if (q.isError || !q.data)
+    return (
+      <QueryError
+        error={q.error}
+        pending={q.isFetching}
+        onRetry={() => q.refetch()}
+        title="Não foi possível carregar a visão geral."
+      />
+    );
   const d = q.data!;
   const turnout = d.progress?.eligible
     ? Math.round((d.progress.votes / d.progress.eligible) * 100)

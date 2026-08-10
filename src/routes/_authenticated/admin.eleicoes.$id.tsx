@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { PhotoPicker } from "@/components/photo-picker";
+import { QueryError } from "@/components/query-error";
 import { ArrowLeft, Play, Plus, Trash2, Printer, Award, AlertTriangle, CheckCircle2, Users, Gavel, Megaphone, ListChecks, Archive, Activity, RefreshCw, Pause } from "lucide-react";
 
 import {
@@ -74,6 +75,15 @@ function ElectionDetail() {
   const q = useQuery({ queryKey: ["admin-election", id], queryFn: () => fnGet({ data: { id } }) });
 
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
+  if (q.isError || !q.data)
+    return (
+      <QueryError
+        error={q.error}
+        pending={q.isFetching}
+        onRetry={() => q.refetch()}
+        title="Não foi possível carregar esta eleição."
+      />
+    );
   const el = q.data!;
 
   return (
@@ -1362,6 +1372,15 @@ function ResultsTab({ electionId }: { electionId: string }) {
   const q = useQuery({ queryKey: ["admin-results", electionId], queryFn: () => fn({ data: { electionId } }) });
 
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Carregando apuração...</p>;
+  if (q.isError || !q.data)
+    return (
+      <QueryError
+        error={q.error}
+        pending={q.isFetching}
+        onRetry={() => q.refetch()}
+        title="Não foi possível carregar a apuração."
+      />
+    );
   const r = q.data!;
   const turnout = r.stats.eleitoresAptos ? Math.round((r.stats.eleitoresQueVotaram / r.stats.eleitoresAptos) * 100) : 0;
   const vagasTotais = r.stats.vagasTitulares + r.stats.vagasSuplentes;
@@ -1680,6 +1699,15 @@ function AtaTab({ electionId }: { electionId: string }) {
   });
 
   if (r.isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
+  if (r.isError || !r.data)
+    return (
+      <QueryError
+        error={r.error}
+        pending={r.isFetching}
+        onRetry={() => r.refetch()}
+        title="Não foi possível carregar os dados da ata."
+      />
+    );
   const data = r.data!;
 
   return (
@@ -1784,6 +1812,15 @@ function LiveMonitorTab({ electionId, status }: { electionId: string; status: El
   }, [electionId, autoRefresh]);
 
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Carregando monitor...</p>;
+  if (q.isError)
+    return (
+      <QueryError
+        error={q.error}
+        pending={q.isFetching}
+        onRetry={() => q.refetch()}
+        title="Não foi possível carregar o monitor ao vivo."
+      />
+    );
   if (!q.data) return <p className="text-sm text-muted-foreground">Sem dados.</p>;
   const d = q.data;
   const turnout = d.stats.eleitoresAptos ? (d.stats.eleitoresQueVotaram / d.stats.eleitoresAptos) * 100 : 0;

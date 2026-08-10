@@ -113,6 +113,29 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const router = useRouter();
+
+  // Uma única assinatura de sessão: quando o refresh_token falha (400), o
+  // Supabase emite SIGNED_OUT — aqui o app reage e o gate leva ao /auth,
+  // em vez de ficar com telas mudas por 401 nas server functions.
+  useEffect(() => {
+    let active = true;
+    const cleanup = { fn: () => {} };
+    void import("@/integrations/supabase/client").then(({ supabase }) => {
+      if (!active) return;
+      const { data } = supabase.auth.onAuthStateChange((event) => {
+        if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+        router.invalidate();
+        if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
+        else queryClient.clear();
+      });
+      cleanup.fn = () => data.subscription.unsubscribe();
+    });
+    return () => {
+      active = false;
+      cleanup.fn();
+    };
+  }, [router, queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>
