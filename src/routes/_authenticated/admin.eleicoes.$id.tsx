@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { PhotoPicker } from "@/components/photo-picker";
+import { QueryError } from "@/components/query-error";
 import { ArrowLeft, Play, Plus, Trash2, Printer, Award, AlertTriangle, CheckCircle2, Users, Gavel, Megaphone, ListChecks, Archive, Activity, RefreshCw, Pause } from "lucide-react";
 
 import {
