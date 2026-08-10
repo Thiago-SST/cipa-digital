@@ -5,6 +5,7 @@ import { ShieldAlert, Sparkles } from "lucide-react";
 
 import { getAdminContext, bootstrapFirstAdmin } from "@/lib/admin.functions";
 import { AdminShell } from "@/components/admin-shell";
+import { QueryError } from "@/components/query-error";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/admin")({
@@ -26,6 +27,20 @@ function AdminLayout() {
 
   if (q.isLoading) {
     return <div className="grid min-h-screen place-items-center text-sm text-muted-foreground">Carregando...</div>;
+  }
+  if (q.isError || !q.data) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background px-4">
+        <div className="w-full max-w-md">
+          <QueryError
+            error={q.error}
+            pending={q.isFetching}
+            onRetry={() => q.refetch()}
+            title="Não foi possível verificar seu acesso administrativo."
+          />
+        </div>
+      </div>
+    );
   }
   const data = q.data!;
 
