@@ -13,7 +13,7 @@ const sub:any=await V("submitChallenge","POST",{candidateId:byName("Carla").id,m
 console.log("impugnacao:", sub.__error??"ok");
 const painel:any=await V("getChallengePanel","GET");
 console.log("painel publico exibe matricula?", JSON.stringify(painel.result?.candidates?.[0]??{}).includes("matricula"));
-const ch=await R("listAllChallenges","GET",{electionId:st.eid});
+const chr:any=await R("listAllChallenges","GET",{electionId:st.eid}); const ch=Array.isArray(chr)?chr:(chr.items??chr.challenges??chr.rows??[]);
 console.log("admin ve impugnacoes:", ch.length, ch[0]?.decisao);
 console.log("julgar deferido:", await R("judgeChallenge","POST",{id:ch[0].id,decisao:"deferido",justificativa:"Procedente conforme edital."}));
 console.log("status Carla apos deferimento:", (await R("listCandidates","GET",{electionId:st.eid})).find((c:any)=>c.nome.startsWith("Carla")).status);
